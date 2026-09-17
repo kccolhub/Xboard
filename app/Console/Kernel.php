@@ -7,6 +7,7 @@ use App\Utils\CacheKey;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Console\Kernel as ConsoleKernel;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Schema;
 
 class Kernel extends ConsoleKernel
 {
@@ -48,7 +49,9 @@ class Kernel extends ConsoleKernel
         // if (env('ENABLE_AUTO_BACKUP_AND_UPDATE', false)) {
         //     $schedule->command('backup:database', ['true'])->daily()->onOneServer();
         // }
-        app(PluginManager::class)->registerPluginSchedules($schedule);
+        if (Schema::hasTable('v2_plugins')) {
+            app(PluginManager::class)->registerPluginSchedules($schedule);
+        }
 
     }
 
@@ -62,7 +65,9 @@ class Kernel extends ConsoleKernel
         $this->load(__DIR__ . '/Commands');
 
         try {
-            app(PluginManager::class)->initializeEnabledPlugins();
+            if (Schema::hasTable('v2_plugins')) {
+                app(PluginManager::class)->initializeEnabledPlugins();
+            }
         } catch (\Exception $e) {
         }
         require base_path('routes/console.php');
