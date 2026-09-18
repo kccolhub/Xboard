@@ -17,9 +17,11 @@ class SettingServiceProvider extends ServiceProvider
      */
     public function register()
     {
-        Connection::resolverFor('pgsql', function ($connection, $database = '', $prefix = '', $config = []) {
-            return new PoolerPostgresConnection($connection, $database, $prefix, $config);
-        });
+        if (env('DB_POOLER_MODE', false)) {
+            Connection::resolverFor('pgsql', function ($connection, $database = '', $prefix = '', $config = []) {
+                return new PoolerPostgresConnection($connection, $database, $prefix, $config);
+            });
+        }
 
         $this->app->scoped(Setting::class, function (Application $app) {
             return new Setting();

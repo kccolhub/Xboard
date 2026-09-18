@@ -90,7 +90,7 @@ return [
             // avoid server-side prepared statements that are session-bound.
             'options' => [
                 PDO::ATTR_PERSISTENT => false,
-                PDO::ATTR_EMULATE_PREPARES => true,
+                PDO::ATTR_EMULATE_PREPARES => env('DB_POOLER_MODE', false),
             ],
         ],
 
