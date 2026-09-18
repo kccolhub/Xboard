@@ -58,7 +58,8 @@ class GiftCardTemplate extends Model
         'rewards' => 'array',
         'limits' => 'array',
         'special_config' => 'array',
-        'status' => 'boolean'
+        // The legacy status field is tinyint(0/1), not a PostgreSQL boolean.
+        'status' => 'integer'
     ];
 
     /**

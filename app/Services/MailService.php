@@ -47,8 +47,8 @@ class MailService
     public function getTotalUsersNeedRemind(): int
     {
         return User::where(function ($query) {
-            $query->where('remind_expire', true)
-                ->orWhere('remind_traffic', true);
+            $query->where('remind_expire', 1)
+                ->orWhere('remind_traffic', 1);
         })
             ->where('banned', false)
             ->whereNotNull('email')
@@ -70,8 +70,8 @@ class MailService
 
         User::select('id', 'email', 'expired_at', 'transfer_enable', 'u', 'd', 'remind_expire', 'remind_traffic')
             ->where(function ($query) {
-                $query->where('remind_expire', true)
-                    ->orWhere('remind_traffic', true);
+                $query->where('remind_expire', 1)
+                ->orWhere('remind_traffic', 1);
             })
             ->where('banned', false)
             ->whereNotNull('email')

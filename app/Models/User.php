@@ -71,8 +71,9 @@ class User extends Authenticatable
         'banned' => 'boolean',
         'is_admin' => 'boolean',
         'is_staff' => 'boolean',
-        'remind_expire' => 'boolean',
-        'remind_traffic' => 'boolean',
+        // These legacy flags are tinyint columns, not PostgreSQL booleans.
+        'remind_expire' => 'integer',
+        'remind_traffic' => 'integer',
         'commission_auto_check' => 'boolean',
         'commission_rate' => 'float',
         'next_reset_at' => 'timestamp',

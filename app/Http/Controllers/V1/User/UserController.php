@@ -180,7 +180,7 @@ class UserController extends Controller
         ]);
         foreach (['remind_expire', 'remind_traffic'] as $field) {
             if (array_key_exists($field, $updateData)) {
-                $updateData[$field] = (bool) $updateData[$field];
+                $updateData[$field] = (int) $updateData[$field];
             }
         }
 

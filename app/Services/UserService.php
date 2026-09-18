@@ -174,8 +174,8 @@ class UserService
         $user->token = Helper::guid();
 
         // 默认设置
-        $user->remind_expire = (bool) admin_setting('default_remind_expire', 1);
-        $user->remind_traffic = (bool) admin_setting('default_remind_traffic', 1);
+        $user->remind_expire = (int) admin_setting('default_remind_expire', 1);
+        $user->remind_traffic = (int) admin_setting('default_remind_traffic', 1);
         $user->expired_at = null;
 
         // 可选字段

@@ -104,7 +104,7 @@ class GiftCardController extends Controller
                 'name' => $request->input('name'),
                 'description' => $request->input('description'),
                 'type' => $request->input('type'),
-                'status' => $request->input('status', true),
+                'status' => (int) $request->input('status', 1),
                 'conditions' => $request->input('conditions'),
                 'rewards' => $request->input('rewards'),
                 'limits' => $request->input('limits'),
@@ -162,6 +162,10 @@ class GiftCardController extends Controller
 
         try {
             $updateData = collect($validatedData)->except('id')->all();
+
+            if (array_key_exists('status', $updateData)) {
+                $updateData['status'] = (int) $updateData['status'];
+            }
 
             if (empty($updateData)) {
                 return $this->success($template);
