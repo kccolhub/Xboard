@@ -178,6 +178,11 @@ class UserController extends Controller
             'remind_expire',
             'remind_traffic'
         ]);
+        foreach (['remind_expire', 'remind_traffic'] as $field) {
+            if (array_key_exists($field, $updateData)) {
+                $updateData[$field] = (bool) $updateData[$field];
+            }
+        }
 
         $user = $request->user();
         try {

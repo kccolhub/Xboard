@@ -93,6 +93,7 @@ class Plan extends Model
     protected $casts = [
         'show' => 'boolean',
         'renew' => 'boolean',
+        'sell' => 'boolean',
         'created_at' => 'timestamp',
         'updated_at' => 'timestamp',
         'group_id' => 'integer',

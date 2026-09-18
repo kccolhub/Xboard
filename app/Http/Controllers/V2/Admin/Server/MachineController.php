@@ -56,7 +56,7 @@ class MachineController extends Controller
                 $update['notes'] = $params['notes'];
             }
             if (array_key_exists('is_active', $params)) {
-                $update['is_active'] = $params['is_active'];
+                $update['is_active'] = (bool) $params['is_active'];
             }
             $machine->update($update);
             return $this->success(true);
@@ -65,7 +65,7 @@ class MachineController extends Controller
         $machine = ServerMachine::create([
             'name' => $params['name'],
             'notes' => $params['notes'] ?? null,
-            'is_active' => $params['is_active'] ?? true,
+            'is_active' => (bool) ($params['is_active'] ?? true),
             'token' => ServerMachine::generateToken(),
         ]);
 

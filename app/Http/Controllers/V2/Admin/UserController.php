@@ -229,6 +229,12 @@ class UserController extends Controller
     {
         $params = $request->validated();
 
+        foreach (['banned', 'is_admin', 'is_staff'] as $field) {
+            if (array_key_exists($field, $params)) {
+                $params[$field] = (bool) $params[$field];
+            }
+        }
+
         $user = User::find($request->input('id'));
         if (!$user) {
             return $this->fail([400202, '用户不存在']);

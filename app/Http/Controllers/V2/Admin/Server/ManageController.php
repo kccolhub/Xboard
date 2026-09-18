@@ -51,6 +51,11 @@ class ManageController extends Controller
     public function save(ServerSave $request)
     {
         $params = $request->validated();
+        foreach (['show', 'enabled', 'rate_time_enable'] as $field) {
+            if (array_key_exists($field, $params)) {
+                $params[$field] = (bool) $params[$field];
+            }
+        }
         if ($request->input('id')) {
             $server = Server::find($request->input('id'));
             if (!$server) {
@@ -89,7 +94,7 @@ class ManageController extends Controller
         }
 
         if (array_key_exists('show', $params)) {
-            $server->show = (int) $params['show'];
+            $server->show = (bool) $params['show'];
         }
         if (array_key_exists('machine_id', $params)) {
             $server->machine_id = $params['machine_id'] ?: null;
@@ -235,7 +240,7 @@ class ManageController extends Controller
 
         $update = [];
         if (array_key_exists('show', $params) && $params['show'] !== null) {
-            $update['show'] = (int) $params['show'];
+            $update['show'] = (bool) $params['show'];
         }
         if (array_key_exists('enabled', $params) && $params['enabled'] !== null) {
             $update['enabled'] = (bool) $params['enabled'];

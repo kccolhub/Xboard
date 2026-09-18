@@ -92,6 +92,12 @@ class PlanController extends Controller
             'sell'
         ]);
 
+        foreach (['show', 'renew', 'sell'] as $field) {
+            if (array_key_exists($field, $updateData)) {
+                $updateData[$field] = (bool) $updateData[$field];
+            }
+        }
+
         $plan = Plan::find($request->input('id'));
         if (!$plan) {
             return $this->fail([400202, '该订阅不存在']);
