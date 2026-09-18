@@ -313,13 +313,22 @@ class SingBox extends AbstractProtocol
 
     /**
      * 根据客户端版本自适应配置格式
-     * 模板基准格式: 1.13.0+ (最新)
+     * 模板基准格式: 1.14.0+ (最新稳定版)
      */
     protected function adaptConfigForVersion(): void
     {
-        $coreVersion = $this->getSingBoxCoreVersion();
-        if (empty($coreVersion)) {
-            return;
+        // 没有版本信息时按当前稳定版处理，避免数据库中旧模板原样下发。
+        $coreVersion = $this->getSingBoxCoreVersion() ?? '1.14.0';
+
+        // >= 1.12.0 使用新的 DNS server 格式；1.14.0 已移除旧格式
+        if (version_compare($coreVersion, '1.12.0', '>=')) {
+            $this->upgradeDnsServersToCurrent();
+            $this->upgradeDnsResolverRules();
+        }
+
+        // >= 1.11.0: 将旧入站字段迁移为 route action
+        if (version_compare($coreVersion, '1.11.0', '>=')) {
+            $this->upgradeInboundFieldsToActions();
         }
 
         // >= 1.13.0: 移除已删除的 block/dns 出站
@@ -327,15 +336,18 @@ class SingBox extends AbstractProtocol
             $this->upgradeSpecialOutboundsToActions();
         }
 
-        // < 1.11.0: rule action 降级为旧出站; 恢复废弃字段
+        // < 1.11.0: rule action 和入站 action 降级为旧格式
         if (version_compare($coreVersion, '1.11.0', '<')) {
+            $this->downgradeInboundRuleActions();
             $this->downgradeActionsToSpecialOutbounds();
             $this->restoreDeprecatedInboundFields();
         }
 
-        // < 1.12.0: DNS type+server → 旧 address 格式
+        // < 1.12.0: 新 DNS server 和默认解析器降级为旧格式
         if (version_compare($coreVersion, '1.12.0', '<')) {
+            $this->downgradeDnsRuleActions();
             $this->convertDnsServersToLegacy();
+            $this->restoreLegacyDnsResolver();
         }
 
         // < 1.10.0: tun address 数组 → inet4_address/inet6_address
@@ -367,9 +379,178 @@ class SingBox extends AbstractProtocol
         return '1.13.0';
     }
 
-    /**
-     * sing-box >= 1.13.0: block/dns 出站升级为 action
-     */
+    /** sing-box >= 1.12.0: 旧 DNS server 转换为 type/server 格式。 */
+    private function upgradeDnsServersToCurrent(): void
+    {
+        if (!isset($this->config['dns']['servers'])) {
+            return;
+        }
+
+        $rcodeTags = [];
+        foreach ($this->config['dns']['servers'] as &$server) {
+            if (isset($server['type'])) {
+                if ($server['type'] === 'rcode') {
+                    $rcodeTags[$server['tag'] ?? ''] = strtoupper($server['rcode'] ?? 'success');
+                    unset($server['type'], $server['rcode']);
+                }
+                continue;
+            }
+
+            $address = $server['address'] ?? null;
+            if (!is_string($address) || $address === '') {
+                continue;
+            }
+
+            if ($address === 'local') {
+                $server['type'] = 'local';
+                unset($server['address']);
+                continue;
+            }
+
+            if (str_starts_with($address, 'rcode://')) {
+                $rcodeTags[$server['tag'] ?? ''] = strtoupper(substr($address, 8) ?: 'success');
+                unset($server['address']);
+                continue;
+            }
+
+            if ($address === 'fakeip') {
+                $server['type'] = 'fakeip';
+                unset($server['address']);
+                continue;
+            }
+
+            $parts = parse_url($address);
+            $scheme = strtolower($parts['scheme'] ?? 'udp');
+            $host = $parts['host'] ?? ($parts['path'] ?? $address);
+
+            $server['type'] = match ($scheme) {
+                'https' => 'https',
+                'tls' => 'tls',
+                'tcp' => 'tcp',
+                'quic' => 'quic',
+                'h3' => 'h3',
+                'dhcp' => 'dhcp',
+                'fakeip' => 'fakeip',
+                default => 'udp',
+            };
+            if ($server['type'] !== 'dhcp') {
+                $server['server'] = $host;
+            } elseif ($host !== 'auto' && $host !== '') {
+                $server['interface'] = $host;
+            }
+            if (isset($parts['port'])) {
+                $server['server_port'] = (int) $parts['port'];
+            }
+            if ($server['type'] === 'https' || $server['type'] === 'h3') {
+                $path = $parts['path'] ?? '';
+                if ($path !== '' && $path !== '/dns-query') {
+                    $server['path'] = $path;
+                }
+            }
+            if (isset($server['address_resolver'])) {
+                $server['domain_resolver'] = $server['address_resolver'];
+                unset($server['address_resolver']);
+            }
+            if (isset($server['address_strategy'])) {
+                $server['domain_strategy'] = $server['address_strategy'];
+                unset($server['address_strategy']);
+            }
+            unset($server['address']);
+        }
+        unset($server);
+
+        if (!empty($rcodeTags) && isset($this->config['dns']['rules'])) {
+            foreach ($this->config['dns']['rules'] as &$rule) {
+                $tag = $rule['server'] ?? '';
+                if (!isset($rcodeTags[$tag])) {
+                    continue;
+                }
+                unset($rule['server']);
+                $rule['action'] = 'predefined';
+                $rule['rcode'] = $rcodeTags[$tag];
+            }
+            unset($rule);
+        }
+
+        $this->config['dns']['servers'] = array_values(array_filter(
+            $this->config['dns']['servers'],
+            fn ($server) => isset($server['type'])
+        ));
+    }
+
+    /** 将旧的 outbound DNS 规则迁移为全局默认解析器。 */
+    private function upgradeDnsResolverRules(): void
+    {
+        $rules = $this->config['dns']['rules'] ?? [];
+        $defaultResolver = null;
+        $remaining = [];
+
+        foreach ($rules as $rule) {
+            $outbound = $rule['outbound'] ?? null;
+            if ($outbound === ['any'] && isset($rule['server'])) {
+                $defaultResolver ??= ['server' => $rule['server']];
+                continue;
+            }
+            $remaining[] = $rule;
+        }
+
+        if ($defaultResolver !== null) {
+            $this->config['route']['default_domain_resolver'] ??= $defaultResolver;
+        }
+        $this->config['dns']['rules'] = $remaining;
+    }
+
+    /** 将 1.10 及更早的入站字段迁移为 1.11+ route action。 */
+    private function upgradeInboundFieldsToActions(): void
+    {
+        if (!isset($this->config['inbounds'])) {
+            return;
+        }
+
+        $actions = [];
+        foreach ($this->config['inbounds'] as $index => &$inbound) {
+            if (empty($inbound['tag'])) {
+                $inbound['tag'] = 'in-' . $index;
+            }
+            $tag = $inbound['tag'];
+
+            if (!empty($inbound['domain_strategy'])) {
+                $actions[] = [
+                    'inbound' => $tag,
+                    'action' => 'resolve',
+                    'strategy' => $inbound['domain_strategy'],
+                ];
+            }
+            if (!empty($inbound['sniff'])) {
+                $action = [
+                    'inbound' => $tag,
+                    'action' => 'sniff',
+                ];
+                if (!empty($inbound['sniff_timeout'])) {
+                    $action['timeout'] = $inbound['sniff_timeout'];
+                }
+                $actions[] = $action;
+            }
+
+            unset(
+                $inbound['domain_strategy'],
+                $inbound['sniff'],
+                $inbound['sniff_timeout'],
+                $inbound['sniff_override_destination'],
+                $inbound['endpoint_independent_nat']
+            );
+        }
+        unset($inbound);
+
+        if (!empty($actions)) {
+            $this->config['route']['rules'] = array_merge(
+                $actions,
+                $this->config['route']['rules'] ?? []
+            );
+        }
+    }
+
+    /** sing-box >= 1.13.0: block/dns 出站升级为 action。 */
     private function upgradeSpecialOutboundsToActions(): void
     {
         $removedTags = [];
@@ -401,9 +582,7 @@ class SingBox extends AbstractProtocol
         }
     }
 
-    /**
-     * sing-box < 1.11.0: rule action 降级为旧 block/dns 出站
-     */
+    /** sing-box < 1.11.0: route action 降级为旧 outbound 字段。 */
     private function downgradeActionsToSpecialOutbounds(): void
     {
         $needsDnsOutbound = false;
@@ -415,6 +594,9 @@ class SingBox extends AbstractProtocol
                     continue;
                 }
                 switch ($rule['action']) {
+                    case 'route':
+                        unset($rule['action']);
+                        break;
                     case 'hijack-dns':
                         unset($rule['action']);
                         $rule['outbound'] = 'dns-out';
@@ -438,9 +620,55 @@ class SingBox extends AbstractProtocol
         }
     }
 
-    /**
-     * sing-box < 1.11.0: 恢复废弃的入站字段
-     */
+    /** sing-box < 1.11.0: 将 sniff/resolve action 恢复为入站字段。 */
+    private function downgradeInboundRuleActions(): void
+    {
+        if (!isset($this->config['inbounds'], $this->config['route']['rules'])) {
+            return;
+        }
+
+        $inboundTags = array_values(array_filter(array_column($this->config['inbounds'], 'tag')));
+        $sniffInbounds = [];
+        $resolveStrategies = [];
+
+        foreach ($this->config['route']['rules'] as $rule) {
+            $action = $rule['action'] ?? null;
+            if (!in_array($action, ['sniff', 'resolve'], true)) {
+                continue;
+            }
+
+            $targets = $rule['inbound'] ?? $inboundTags;
+            $targets = is_array($targets) ? $targets : [$targets];
+            foreach ($targets as $tag) {
+                if ($action === 'sniff') {
+                    $sniffInbounds[$tag] = $rule['timeout'] ?? null;
+                } else {
+                    $resolveStrategies[$tag] = $rule['strategy'] ?? null;
+                }
+            }
+        }
+
+        foreach ($this->config['inbounds'] as &$inbound) {
+            $tag = $inbound['tag'] ?? null;
+            if ($tag !== null && array_key_exists($tag, $sniffInbounds)) {
+                $inbound['sniff'] = true;
+                if ($sniffInbounds[$tag] !== null) {
+                    $inbound['sniff_timeout'] = $sniffInbounds[$tag];
+                }
+            }
+            if ($tag !== null && array_key_exists($tag, $resolveStrategies)) {
+                $inbound['domain_strategy'] = $resolveStrategies[$tag] ?? 'prefer_ipv4';
+            }
+        }
+        unset($inbound);
+
+        $this->config['route']['rules'] = array_values(array_filter(
+            $this->config['route']['rules'],
+            fn ($rule) => !in_array($rule['action'] ?? null, ['sniff', 'resolve'], true)
+        ));
+    }
+
+    /** sing-box < 1.11.0: 恢复废弃的入站字段。 */
     private function restoreDeprecatedInboundFields(): void
     {
         if (!isset($this->config['inbounds'])) {
@@ -453,7 +681,56 @@ class SingBox extends AbstractProtocol
             if (!empty($inbound['sniff'])) {
                 $inbound['sniff_override_destination'] = true;
             }
+            if (!isset($inbound['domain_strategy'])) {
+                $inbound['domain_strategy'] = 'prefer_ipv4';
+            }
         }
+        unset($inbound);
+    }
+
+    /** sing-box < 1.12.0: 将 predefined DNS action 降级为旧 DNS server。 */
+    private function downgradeDnsRuleActions(): void
+    {
+        if (!isset($this->config['dns']['rules'])) {
+            return;
+        }
+
+        $rcodeServers = [];
+        foreach ($this->config['dns']['rules'] as &$rule) {
+            if (($rule['action'] ?? null) !== 'predefined') {
+                continue;
+            }
+            $rcode = strtolower($rule['rcode'] ?? 'success');
+            $tag = 'dns-rcode-' . $rcode;
+            $rcodeServers[$tag] = $rcode;
+            unset($rule['action'], $rule['rcode']);
+            $rule['server'] = $tag;
+        }
+        unset($rule);
+
+        foreach ($rcodeServers as $tag => $rcode) {
+            $this->config['dns']['servers'][] = [
+                'address' => 'rcode://' . $rcode,
+                'tag' => $tag,
+            ];
+        }
+    }
+
+    /** sing-box < 1.12.0: 恢复旧的 outbound DNS 解析规则。 */
+    private function restoreLegacyDnsResolver(): void
+    {
+        unset($this->config['route']['default_domain_resolver']);
+        $rules = $this->config['dns']['rules'] ?? [];
+        foreach ($rules as $rule) {
+            if (($rule['outbound'] ?? null) === ['any'] && ($rule['server'] ?? null) === 'local') {
+                return;
+            }
+        }
+        array_unshift($rules, [
+            'outbound' => ['any'],
+            'server' => 'local',
+        ]);
+        $this->config['dns']['rules'] = $rules;
     }
 
     /**
@@ -471,8 +748,11 @@ class SingBox extends AbstractProtocol
             $type = $server['type'];
             $host = $server['server'] ?? null;
             switch ($type) {
+                case 'local':
+                    $server['address'] = 'local';
+                    break;
                 case 'https':
-                    $server['address'] = "https://{$host}/dns-query";
+                    $server['address'] = "https://{$host}" . ($server['path'] ?? '/dns-query');
                     break;
                 case 'tls':
                     $server['address'] = "tls://{$host}";
@@ -483,11 +763,19 @@ class SingBox extends AbstractProtocol
                 case 'quic':
                     $server['address'] = "quic://{$host}";
                     break;
+                case 'h3':
+                    $server['address'] = "h3://{$host}" . ($server['path'] ?? '/dns-query');
+                    break;
                 case 'udp':
                     $server['address'] = $host;
                     break;
-                case 'block':
-                    $server['address'] = 'rcode://refused';
+                case 'dhcp':
+                    $server['address'] = empty($server['interface'])
+                        ? 'dhcp://auto'
+                        : 'dhcp://' . $server['interface'];
+                    break;
+                case 'fakeip':
+                    $server['address'] = 'fakeip';
                     break;
                 case 'rcode':
                     $server['address'] = 'rcode://' . ($server['rcode'] ?? 'success');
@@ -497,7 +785,15 @@ class SingBox extends AbstractProtocol
                     $server['address'] = $host;
                     break;
             }
-            unset($server['type'], $server['server']);
+            unset(
+                $server['type'],
+                $server['server'],
+                $server['server_port'],
+                $server['path'],
+                $server['interface'],
+                $server['domain_resolver'],
+                $server['domain_strategy']
+            );
         }
         unset($server);
     }
