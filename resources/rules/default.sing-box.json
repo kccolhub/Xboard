@@ -3,14 +3,17 @@
         "rules": [
             {
                 "clash_mode": "global",
+                "action": "route",
                 "server": "remote"
             },
             {
                 "clash_mode": "direct",
+                "action": "route",
                 "server": "local"
             },
             {
                 "rule_set": ["geosite-cn"],
+                "action": "route",
                 "server": "local"
             }
         ],
@@ -74,7 +77,8 @@
         {
             "tag": "自动选择",
             "type": "urltest",
-            "outbounds": []
+            "outbounds": [],
+            "fallback": "direct"
         }
     ],
     "route": {

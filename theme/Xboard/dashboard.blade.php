@@ -5,7 +5,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,minimum-scale=1,user-scalable=no" />
   <title>{{$title}}</title>
-  <script type="module" crossorigin src="/theme/{{$theme}}/assets/umi.js"></script>
+  <script type="module" crossorigin src="/theme/{{$theme}}/assets/umi.js?v={{ substr(md5_file(public_path('theme/' . $theme . '/assets/umi.js')), 0, 12) }}"></script>
 </head>
 
 <body>

@@ -9,7 +9,7 @@ use Log;
 
 class SingBox extends AbstractProtocol
 {
-    public $flags = ['sing-box', 'hiddify', 'sfm'];
+    public $flags = ['sing-box', 'hiddify', 'sfa', 'sfi', 'sfm'];
     public $allowedProtocols = [
         Server::TYPE_SHADOWSOCKS,
         Server::TYPE_TROJAN,
@@ -212,6 +212,25 @@ class SingBox extends AbstractProtocol
             if (!empty($tags)) {
                 array_push($outbound['outbounds'], ...$tags);
             }
+
+            // sing-box rejects selector/urltest outbounds without any tags.
+            // This can happen when every node is filtered out (or before the
+            // first node has been provisioned), so keep the generated profile
+            // importable with a direct fallback instead of emitting an
+            // invalid configuration.
+            $outbound['outbounds'] = array_values(array_unique(array_filter(
+                $outbound['outbounds'] ?? [],
+                fn ($tag) => is_string($tag) && $tag !== ''
+            )));
+            if (empty($outbound['outbounds'])) {
+                $outbound['outbounds'] = ['direct'];
+            }
+            if ($outbound['type'] === 'selector') {
+                $default = $outbound['default'] ?? null;
+                if (!is_string($default) || !in_array($default, $outbound['outbounds'], true)) {
+                    $outbound['default'] = $outbound['outbounds'][0];
+                }
+            }
         }
         unset($outbound);
 
@@ -372,7 +391,7 @@ class SingBox extends AbstractProtocol
             return null;
         }
 
-        if ($this->clientName === 'sing-box') {
+        if (in_array($this->clientName, ['sing-box', 'sfa', 'sfi', 'sfm'], true)) {
             return $this->clientVersion;
         }
 
@@ -490,6 +509,13 @@ class SingBox extends AbstractProtocol
             if ($outbound === ['any'] && isset($rule['server'])) {
                 $defaultResolver ??= ['server' => $rule['server']];
                 continue;
+            }
+
+            // `server` was implicit in older templates.  Since 1.11 it is a
+            // DNS rule action field; make it explicit for current clients so
+            // the profile remains valid after the 1.14 migration.
+            if (isset($rule['server']) && !isset($rule['action'])) {
+                $rule['action'] = 'route';
             }
             $remaining[] = $rule;
         }
