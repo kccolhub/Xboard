@@ -116,15 +116,15 @@ class PaymentController extends Controller
             'ids.array' => '参数有误'
         ]);
         try {
-            DB::beginTransaction();
-            foreach ($request->input('ids') as $k => $v) {
-                if (!Payment::find($v)->update(['sort' => $k + 1])) {
-                    throw new \Exception();
+            DB::transaction(function () use ($request) {
+                foreach ($request->input('ids') as $k => $v) {
+                    $payment = Payment::findOrFail($v);
+                    if (!$payment->update(['sort' => $k + 1])) {
+                        throw new \RuntimeException('payment sort update failed');
+                    }
                 }
-            }
-            DB::commit();
-        } catch (\Exception $e) {
-            DB::rollBack();
+            });
+        } catch (\Throwable $e) {
             return $this->fail([500, '保存失败']);
         }
 

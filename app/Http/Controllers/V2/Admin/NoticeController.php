@@ -85,15 +85,14 @@ class NoticeController extends Controller
         ]);
 
         try {
-            DB::beginTransaction();
-            foreach ($params['ids'] as $k => $v) {
-                $notice = Notice::findOrFail($v);
-                $notice->update(['sort' => $k + 1]);
-            }
-            DB::commit();
+            DB::transaction(function () use ($params) {
+                foreach ($params['ids'] as $k => $v) {
+                    $notice = Notice::findOrFail($v);
+                    $notice->update(['sort' => $k + 1]);
+                }
+            });
             return $this->success(true);
-        } catch (\Exception $e) {
-            DB::rollBack();
+        } catch (\Throwable $e) {
             \Log::error($e);
             return $this->fail([500, '排序保存失败']);
         }

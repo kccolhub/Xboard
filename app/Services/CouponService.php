@@ -13,16 +13,22 @@ class CouponService
     public $planId;
     public $userId;
     public $period;
+    private string $code;
 
     public function __construct($code)
     {
-        $this->coupon = Coupon::where('code', $code)
-            ->lockForUpdate()
-            ->first();
+        $this->code = (string) $code;
+        // Validation can happen outside a transaction. The row lock is
+        // acquired again in use(), which is called inside the order
+        // transaction, so it remains valid with PgBouncer transaction pools.
+        $this->coupon = Coupon::where('code', $this->code)->first();
     }
 
     public function use(Order $order): bool
     {
+        $this->coupon = Coupon::where('code', $this->code)
+            ->lockForUpdate()
+            ->first();
         $this->setPlanId($order->plan_id);
         $this->setUserId($order->user_id);
         $this->setPeriod($order->period);

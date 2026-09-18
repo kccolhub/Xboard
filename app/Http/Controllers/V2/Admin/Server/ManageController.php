@@ -33,15 +33,14 @@ class ManageController extends Controller
         ]);
 
         try {
-            DB::beginTransaction();
-            collect($params)->each(function ($item) {
-                if (isset($item['id']) && isset($item['order'])) {
-                    Server::where('id', $item['id'])->update(['sort' => $item['order']]);
-                }
+            DB::transaction(function () use ($params) {
+                collect($params)->each(function ($item) {
+                    if (isset($item['id']) && isset($item['order'])) {
+                        Server::where('id', $item['id'])->update(['sort' => $item['order']]);
+                    }
+                });
             });
-            DB::commit();
-        } catch (\Exception $e) {
-            DB::rollBack();
+        } catch (\Throwable $e) {
             Log::error($e);
             return $this->fail([500, '保存失败']);
 

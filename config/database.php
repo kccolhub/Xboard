@@ -85,6 +85,13 @@ return [
             'prefix_indexes' => true,
             'search_path' => 'public',
             'sslmode' => 'prefer',
+            // PgBouncer transaction pooling can move statements between
+            // backend sessions. Do not retain PDO connections in Octane and
+            // avoid server-side prepared statements that are session-bound.
+            'options' => [
+                PDO::ATTR_PERSISTENT => false,
+                PDO::ATTR_EMULATE_PREPARES => true,
+            ],
         ],
 
         'sqlsrv' => [

@@ -64,7 +64,7 @@ class TrafficResetService
         HookManager::call('traffic.reset.after', $user);
         return true;
       });
-    } catch (\Exception $e) {
+    } catch (\Throwable $e) {
       Log::error(__('traffic_reset.reset_failed'), [
         'user_id' => $user->id,
         'email' => $user->email,

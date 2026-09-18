@@ -214,8 +214,7 @@ class OrderController extends Controller
             return $this->fail([400, '该用户还有待支付的订单，无法分配']);
         }
 
-        try {
-            DB::beginTransaction();
+        $order = DB::transaction(function () use ($user, $plan, $request) {
             $order = new Order();
             $orderService = new OrderService($order);
             $order->user_id = $user->id;
@@ -238,14 +237,10 @@ class OrderController extends Controller
             $orderService->setInvite($user);
 
             if (!$order->save()) {
-                DB::rollBack();
-                return $this->fail([500, '订单创建失败']);
+                throw new \RuntimeException('订单创建失败');
             }
-            DB::commit();
-        } catch (\Exception $e) {
-            DB::rollBack();
-            throw $e;
-        }
+            return $order;
+        });
 
         return $this->success($order->trade_no);
     }

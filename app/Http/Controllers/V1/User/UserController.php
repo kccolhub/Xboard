@@ -207,7 +207,7 @@ class UserController extends Controller
                     throw new \Exception(__('Transfer failed'));
                 }
             });
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             return $this->fail([400, $e->getMessage()]);
         }
         return $this->success(true);

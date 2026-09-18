@@ -193,8 +193,7 @@ class PluginManager
         // 运行数据库迁移
         $this->runMigrations(pluginCode: $pluginCode);
 
-        DB::beginTransaction();
-        try {
+        return DB::transaction(function () use ($config, $pluginCode) {
             // 提取配置默认值
             $defaultValues = $this->extractDefaultConfig($config);
 
@@ -219,15 +218,8 @@ class PluginManager
 
             // 发布插件资源
             $this->publishAssets($pluginCode);
-
-            DB::commit();
             return true;
-        } catch (\Exception $e) {
-            if (DB::transactionLevel() > 0) {
-                DB::rollBack();
-            }
-            throw $e;
-        }
+        });
     }
 
     /**

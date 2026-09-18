@@ -43,21 +43,20 @@ class PlanController extends Controller
                 return $this->fail([400202, '该订阅不存在']);
             }
             
-            DB::beginTransaction();
             try {
-                if ($request->input('force_update')) {
-                    User::where('plan_id', $plan->id)->update([
-                        'group_id' => $params['group_id'],
-                        'transfer_enable' => $params['transfer_enable'] * 1073741824,
-                        'speed_limit' => $params['speed_limit'],
-                        'device_limit' => $params['device_limit'],
-                    ]);
-                }
-                $plan->update($params);
-                DB::commit();
+                DB::transaction(function () use ($request, $plan, $params) {
+                    if ($request->input('force_update')) {
+                        User::where('plan_id', $plan->id)->update([
+                            'group_id' => $params['group_id'],
+                            'transfer_enable' => $params['transfer_enable'] * 1073741824,
+                            'speed_limit' => $params['speed_limit'],
+                            'device_limit' => $params['device_limit'],
+                        ]);
+                    }
+                    $plan->update($params);
+                });
                 return $this->success(true);
-            } catch (\Exception $e) {
-                DB::rollBack();
+            } catch (\Throwable $e) {
                 Log::error($e);
                 return $this->fail([500, '保存失败']);
             }
@@ -115,15 +114,15 @@ class PlanController extends Controller
         ]);
 
         try {
-            DB::beginTransaction();
-            foreach ($params['ids'] as $k => $v) {
-                if (!Plan::find($v)->update(['sort' => $k + 1])) {
-                    throw new \Exception();
+            DB::transaction(function () use ($params) {
+                foreach ($params['ids'] as $k => $v) {
+                    $plan = Plan::findOrFail($v);
+                    if (!$plan->update(['sort' => $k + 1])) {
+                        throw new \RuntimeException('plan sort update failed');
+                    }
                 }
-            }
-            DB::commit();
-        } catch (\Exception $e) {
-            DB::rollBack();
+            });
+        } catch (\Throwable $e) {
             Log::error($e);
             return $this->fail([500, '保存失败']);
         }

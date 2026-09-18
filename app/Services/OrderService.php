@@ -350,7 +350,7 @@ class OrderService
             if ($shouldDispatch) {
                 OrderHandleJob::dispatchSync($order->trade_no);
             }
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             Log::error($e);
             return false;
         }
@@ -389,7 +389,7 @@ class OrderService
             $this->order = $cancelledOrder;
             HookManager::call('order.cancel.after', $cancelledOrder);
             return true;
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             Log::error($e);
             return false;
         }

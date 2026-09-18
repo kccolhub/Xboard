@@ -102,7 +102,9 @@ return [
 
         OperationTerminated::class => [
             FlushTemporaryContainerInstances::class,
-            // DisconnectFromDatabases::class,
+            // Release PDO connections after every request/task. This prevents
+            // transaction state from leaking across long-lived Octane workers.
+            DisconnectFromDatabases::class,
             // CollectGarbage::class,
         ],
 

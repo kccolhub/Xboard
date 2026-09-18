@@ -79,15 +79,14 @@ class KnowledgeController extends Controller
             'ids.array' => '参数有误'
         ]);
         try {
-            DB::beginTransaction();
-            foreach ($request->input('ids') as $k => $v) {
-                $knowledge = Knowledge::find($v);
-                $knowledge->timestamps = false;
-                $knowledge->update(['sort' => $k + 1]);
-            }
-            DB::commit();
-        } catch (\Exception $e) {
-            DB::rollBack();
+            DB::transaction(function () use ($request) {
+                foreach ($request->input('ids') as $k => $v) {
+                    $knowledge = Knowledge::findOrFail($v);
+                    $knowledge->timestamps = false;
+                    $knowledge->update(['sort' => $k + 1]);
+                }
+            });
+        } catch (\Throwable $e) {
             throw new ApiException('保存失败');
         }
         return $this->success(true);

@@ -59,17 +59,18 @@ class CouponController extends Controller
             'id.numeric' => '优惠券ID必须为数字'
         ]);
         try {
-            DB::beginTransaction();
-            $coupon = Coupon::find($request->input('id'));
-            if (!$coupon) {
-                throw new ApiException(400201, '优惠券不存在');
-            }
-            $coupon->update($params);
-            DB::commit();
-        } catch (\Exception $e) {
+            DB::transaction(function () use ($request, $params) {
+                $coupon = Coupon::find($request->input('id'));
+                if (!$coupon) {
+                    throw new ApiException(400201, '优惠券不存在');
+                }
+                $coupon->update($params);
+            });
+        } catch (\Throwable $e) {
             \Log::error($e);
             return $this->fail([500, '保存失败']);
         }
+        return $this->success(true);
     }
 
     public function show(Request $request)
@@ -130,9 +131,8 @@ class CouponController extends Controller
             array_push($coupons, $coupon);
         }
         try {
-            DB::beginTransaction();
-            if (
-                !Coupon::insert(array_map(function ($item) use ($coupon) {
+            DB::transaction(function () use ($coupons, $coupon) {
+                $inserted = Coupon::insert(array_map(function ($item) use ($coupon) {
                     // format data
                     if (isset($item['limit_plan_ids']) && is_array($item['limit_plan_ids'])) {
                         $item['limit_plan_ids'] = json_encode($coupon['limit_plan_ids']);
@@ -141,13 +141,12 @@ class CouponController extends Controller
                         $item['limit_period'] = json_encode($coupon['limit_period']);
                     }
                     return $item;
-                }, $coupons))
-            ) {
-                throw new \Exception();
-            }
-            DB::commit();
-        } catch (\Exception $e) {
-            DB::rollBack();
+                }, $coupons));
+                if (!$inserted) {
+                    throw new \RuntimeException('coupon batch insert failed');
+                }
+            });
+        } catch (\Throwable $e) {
             return $this->fail([500, '生成失败']);
         }
 

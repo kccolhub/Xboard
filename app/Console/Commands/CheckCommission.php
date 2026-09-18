@@ -64,22 +64,15 @@ class CheckCommission extends Command
             ->where('invite_user_id', '!=', NULL)
             ->get();
         foreach ($orders as $order) {
-            try{
-                DB::beginTransaction();
+            DB::transaction(function () use ($order) {
                 if (!$this->payHandle($order->invite_user_id, $order)) {
-                    DB::rollBack();
-                    continue;
+                    throw new \RuntimeException('commission payment failed');
                 }
                 $order->commission_status = 2;
                 if (!$order->save()) {
-                    DB::rollBack();
-                    continue;
+                    throw new \RuntimeException('commission order update failed');
                 }
-                DB::commit();
-            } catch (\Exception $e){
-                DB::rollBack();
-                throw $e;
-            }
+            });
         }
     }
 
@@ -109,7 +102,6 @@ class CheckCommission extends Command
                 $inviter->increment('commission_balance', $commissionBalance);
             }
             if (!$inviter->save()) {
-                DB::rollBack();
                 return false;
             }
             CommissionLog::create([

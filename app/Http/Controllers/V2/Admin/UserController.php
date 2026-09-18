@@ -441,16 +441,18 @@ class UserController extends Controller
 
 
         try {
-            DB::beginTransaction();
-            $users = [];
-            foreach ($usersData as $userData) {
-                $user = $userService->createUser($userData);
-                $user->save();
-                $users[] = $user;
-            }
-            DB::commit();
-        } catch (\Exception $e) {
-            DB::rollBack();
+            $users = DB::transaction(function () use ($usersData, $userService) {
+                $users = [];
+                foreach ($usersData as $userData) {
+                    $user = $userService->createUser($userData);
+                    if (!$user->save()) {
+                        throw new \RuntimeException('user creation failed');
+                    }
+                    $users[] = $user;
+                }
+                return $users;
+            });
+        } catch (\Throwable $e) {
             return $this->fail([500, '生成失败']);
         }
 
@@ -522,16 +524,18 @@ class UserController extends Controller
         }
 
         try {
-            DB::beginTransaction();
-            $users = [];
-            foreach ($usersData as $userData) {
-                $user = $userService->createUser($userData);
-                $user->save();
-                $users[] = $user;
-            }
-            DB::commit();
-        } catch (\Exception $e) {
-            DB::rollBack();
+            $users = DB::transaction(function () use ($usersData, $userService) {
+                $users = [];
+                foreach ($usersData as $userData) {
+                    $user = $userService->createUser($userData);
+                    if (!$user->save()) {
+                        throw new \RuntimeException('user creation failed');
+                    }
+                    $users[] = $user;
+                }
+                return $users;
+            });
+        } catch (\Throwable $e) {
             return $this->fail([500, '生成失败']);
         }
 
@@ -699,13 +703,13 @@ class UserController extends Controller
         ]);
 
         try {
-            DB::beginTransaction();
-            $user->orders()->delete();
-            $user->codes()->delete();
-            $user->stat()->delete();
-            $user->tickets()->delete();
-            $user->delete();
-            DB::commit();
+            DB::transaction(function () use ($user) {
+                $user->orders()->delete();
+                $user->codes()->delete();
+                $user->stat()->delete();
+                $user->tickets()->delete();
+                $user->delete();
+            });
 
             HookManager::call('admin.user.destroy.after', [
                 'user' => $user,
@@ -713,8 +717,7 @@ class UserController extends Controller
             ]);
 
             return $this->success(true);
-        } catch (\Exception $e) {
-            DB::rollBack();
+        } catch (\Throwable $e) {
             Log::error($e);
             return $this->fail([500, '删除失败']);
         }
