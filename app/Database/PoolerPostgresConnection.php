@@ -15,14 +15,12 @@ class PoolerPostgresConnection extends PostgresConnection
 {
     public function prepareBindings(array $bindings)
     {
-        $bindings = parent::prepareBindings($bindings);
-
         foreach ($bindings as $key => $value) {
             if (is_bool($value)) {
                 $bindings[$key] = $value ? 'true' : 'false';
             }
         }
 
-        return $bindings;
+        return parent::prepareBindings($bindings);
     }
 }
