@@ -677,7 +677,7 @@ class UserController extends Controller
 
         try {
             $builder->update([
-                'banned' => 1
+                'banned' => true
             ]);
         } catch (\Exception $e) {
             Log::error($e);

@@ -55,7 +55,7 @@ class NoticeController extends Controller
         if (!$notice) {
             return $this->fail([400202, '公告不存在']);
         }
-        $notice->show = $notice->show ? 0 : 1;
+        $notice->show = !$notice->show;
         if (!$notice->save()) {
             return $this->fail([500, '保存失败']);
         }

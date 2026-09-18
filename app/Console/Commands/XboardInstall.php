@@ -206,7 +206,7 @@ class XboardInstall extends Command
         $user->password = password_hash($password, PASSWORD_DEFAULT);
         $user->uuid = Helper::guid(true);
         $user->token = Helper::guid();
-        $user->is_admin = 1;
+        $user->is_admin = true;
         return $user->save();
     }
 

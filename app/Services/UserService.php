@@ -61,7 +61,7 @@ class UserService
                 $query->where('expired_at', '>=', time())
                     ->orWhere('expired_at', NULL);
             })
-            ->where('banned', 0)
+            ->where('banned', false)
             ->get();
     }
 

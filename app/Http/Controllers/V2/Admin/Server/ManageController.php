@@ -276,7 +276,7 @@ class ManageController extends Controller
         }
 
         $copiedServer = $server->replicate();
-        $copiedServer->show = 0;
+        $copiedServer->show = false;
         $copiedServer->code = null;
         $copiedServer->u = 0;
         $copiedServer->d = 0;

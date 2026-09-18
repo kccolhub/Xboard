@@ -124,7 +124,7 @@ class CouponController extends Controller
         $coupons = [];
         $coupon = $request->validated();
         $coupon['created_at'] = $coupon['updated_at'] = time();
-        $coupon['show'] = 1;
+        $coupon['show'] = true;
         unset($coupon['generate_count']);
         for ($i = 0; $i < $request->input('generate_count'); $i++) {
             $coupon['code'] = Helper::randomChar(8);

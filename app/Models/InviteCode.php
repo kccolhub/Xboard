@@ -14,6 +14,6 @@ class InviteCode extends Model
         'status' => 'boolean',
     ];
 
-    const STATUS_UNUSED = 0;
-    const STATUS_USED = 1;
+    const STATUS_UNUSED = false;
+    const STATUS_USED = true;
 }
