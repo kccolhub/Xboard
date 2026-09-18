@@ -14,6 +14,9 @@ class Kernel extends HttpKernel
      * @var array<int, class-string>
      */
     protected $middleware = [
+        // Octane keeps workers alive between requests. Ensure a failed request
+        // cannot leave an open transaction for the next request.
+        \App\Http\Middleware\EnsureTransactionState::class,
         \Illuminate\Http\Middleware\HandleCors::class,
         \App\Http\Middleware\TrustProxies::class,
         \App\Http\Middleware\CheckForMaintenanceMode::class,
