@@ -2,7 +2,9 @@
 
 namespace App\Providers;
 
+use App\Database\PoolerPostgresConnection;
 use App\Support\Setting;
+use Illuminate\Database\Connection;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Contracts\Foundation\Application;
 
@@ -15,6 +17,10 @@ class SettingServiceProvider extends ServiceProvider
      */
     public function register()
     {
+        Connection::resolverFor('pgsql', function ($connection, $database = '', $prefix = '', $config = []) {
+            return new PoolerPostgresConnection($connection, $database, $prefix, $config);
+        });
+
         $this->app->scoped(Setting::class, function (Application $app) {
             return new Setting();
         });
