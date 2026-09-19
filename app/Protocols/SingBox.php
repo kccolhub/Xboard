@@ -343,6 +343,7 @@ class SingBox extends AbstractProtocol
         if (version_compare($coreVersion, '1.12.0', '>=')) {
             $this->upgradeDnsServersToCurrent();
             $this->upgradeDnsResolverRules();
+            $this->removeEmptyDirectDnsDetours();
         }
 
         // >= 1.11.0: 将旧入站字段迁移为 route action
@@ -524,6 +525,40 @@ class SingBox extends AbstractProtocol
             $this->config['route']['default_domain_resolver'] ??= $defaultResolver;
         }
         $this->config['dns']['rules'] = $remaining;
+    }
+
+    /**
+     * Current sing-box releases reject DNS detours that point at an empty
+     * direct outbound. Direct is already the default path in that case, so
+     * removing the detour preserves the intended routing while allowing the
+     * generated configuration to start. Keep detours to customized direct
+     * outbounds because options such as bind_interface still have meaning.
+     */
+    private function removeEmptyDirectDnsDetours(): void
+    {
+        $emptyDirectTags = [];
+        foreach ($this->config['outbounds'] ?? [] as $outbound) {
+            if (($outbound['type'] ?? null) !== 'direct' || empty($outbound['tag'])) {
+                continue;
+            }
+
+            $options = array_diff_key($outbound, array_flip(['type', 'tag']));
+            if ($options === []) {
+                $emptyDirectTags[$outbound['tag']] = true;
+            }
+        }
+
+        if ($emptyDirectTags === [] || !isset($this->config['dns']['servers'])) {
+            return;
+        }
+
+        foreach ($this->config['dns']['servers'] as &$server) {
+            $detour = $server['detour'] ?? null;
+            if (is_string($detour) && isset($emptyDirectTags[$detour])) {
+                unset($server['detour']);
+            }
+        }
+        unset($server);
     }
 
     /** 将 1.10 及更早的入站字段迁移为 1.11+ route action。 */
