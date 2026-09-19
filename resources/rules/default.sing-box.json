@@ -40,6 +40,13 @@
             "store_fakeip": true
         }
     },
+    "http_clients": [
+        {
+            "tag": "rule-set-direct",
+            "engine": "go",
+            "connect_timeout": "15s"
+        }
+    ],
     "inbounds": [
         {
             "auto_route": true,
@@ -82,6 +89,7 @@
     ],
     "route": {
         "auto_detect_interface": true,
+        "default_http_client": "rule-set-direct",
         "default_domain_resolver": {
             "server": "local"
         },
@@ -119,15 +127,15 @@
                 "tag": "geosite-cn",
                 "type": "remote",
                 "format": "binary",
-                "url": "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-cn.srs",
-                "download_detour": "自动选择"
+                "url": "https://cdn.jsdelivr.net/gh/SagerNet/sing-geosite@rule-set/geosite-cn.srs",
+                "http_client": "rule-set-direct"
             },
             {
                 "tag": "geoip-cn",
                 "type": "remote",
                 "format": "binary",
-                "url": "https://raw.githubusercontent.com/SagerNet/sing-geoip/rule-set/geoip-cn.srs",
-                "download_detour": "自动选择"
+                "url": "https://cdn.jsdelivr.net/gh/SagerNet/sing-geoip@rule-set/geoip-cn.srs",
+                "http_client": "rule-set-direct"
             }
         ]
     }

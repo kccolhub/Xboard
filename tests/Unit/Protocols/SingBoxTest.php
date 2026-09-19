@@ -47,7 +47,82 @@ class SingBoxTest extends TestCase
         $this->assertSame('direct-vpn', $result['dns']['servers'][0]['detour']);
     }
 
+    public function test_it_upgrades_rule_set_downloads_to_a_direct_http_client(): void
+    {
+        $config = [
+            'route' => [
+                'rule_set' => [[
+                    'tag' => 'geosite-cn',
+                    'type' => 'remote',
+                    'download_detour' => '自动选择',
+                ]],
+            ],
+        ];
+
+        $result = $this->invokeConfigMethod($config, 'upgradeRuleSetHttpClient');
+
+        $this->assertSame('rule-set-direct', $result['route']['default_http_client']);
+        $this->assertSame('rule-set-direct', $result['route']['rule_set'][0]['http_client']);
+        $this->assertArrayNotHasKey('download_detour', $result['route']['rule_set'][0]);
+        $this->assertSame('rule-set-direct', $result['http_clients'][0]['tag']);
+        $this->assertArrayNotHasKey('detour', $result['http_clients'][0]);
+    }
+
+    public function test_it_downgrades_rule_set_http_client_for_pre_114_clients(): void
+    {
+        $config = [
+            'http_clients' => [['tag' => 'rule-set-direct', 'engine' => 'go']],
+            'route' => [
+                'default_http_client' => 'rule-set-direct',
+                'rule_set' => [[
+                    'tag' => 'geoip-cn',
+                    'type' => 'remote',
+                    'http_client' => 'rule-set-direct',
+                ]],
+            ],
+        ];
+
+        $result = $this->invokeConfigMethod($config, 'downgradeRuleSetHttpClient');
+
+        $this->assertArrayNotHasKey('http_clients', $result);
+        $this->assertArrayNotHasKey('default_http_client', $result['route']);
+        $this->assertArrayNotHasKey('http_client', $result['route']['rule_set'][0]);
+        $this->assertSame('direct', $result['route']['rule_set'][0]['download_detour']);
+    }
+
+    public function test_it_rewrites_official_rule_sets_to_the_panel_host(): void
+    {
+        $config = [
+            'route' => [
+                'rule_set' => [
+                    [
+                        'tag' => 'geosite-cn',
+                        'url' => 'https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-cn.srs',
+                    ],
+                    [
+                        'tag' => 'custom',
+                        'url' => 'https://rules.example/custom.srs',
+                    ],
+                ],
+            ],
+        ];
+
+        $result = $this->invokeConfigMethod(
+            $config,
+            'replaceOfficialRuleSetUrls',
+            ['https://panel.example']
+        );
+
+        $this->assertSame('https://panel.example/rules/geosite-cn.srs', $result['route']['rule_set'][0]['url']);
+        $this->assertSame('https://rules.example/custom.srs', $result['route']['rule_set'][1]['url']);
+    }
+
     private function normalizeDnsDetours(array $config): array
+    {
+        return $this->invokeConfigMethod($config, 'removeEmptyDirectDnsDetours');
+    }
+
+    private function invokeConfigMethod(array $config, string $methodName, array $arguments = []): array
     {
         $reflection = new ReflectionClass(SingBox::class);
         /** @var SingBox $protocol */
@@ -56,8 +131,8 @@ class SingBoxTest extends TestCase
         $configProperty = $reflection->getProperty('config');
         $configProperty->setValue($protocol, $config);
 
-        $method = $reflection->getMethod('removeEmptyDirectDnsDetours');
-        $method->invoke($protocol);
+        $method = $reflection->getMethod($methodName);
+        $method->invoke($protocol, ...$arguments);
 
         return $configProperty->getValue($protocol);
     }

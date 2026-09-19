@@ -339,6 +339,11 @@ class SingBox extends AbstractProtocol
         // 没有版本信息时按当前稳定版处理，避免数据库中旧模板原样下发。
         $coreVersion = $this->getSingBoxCoreVersion() ?? '1.14.0';
 
+        // Serve the bootstrap rule sets from the same panel host as the
+        // subscription.  Clients that can fetch their subscription can then
+        // start without first reaching GitHub or an already-running proxy.
+        $this->usePanelHostedRuleSets();
+
         // >= 1.12.0 使用新的 DNS server 格式；1.14.0 已移除旧格式
         if (version_compare($coreVersion, '1.12.0', '>=')) {
             $this->upgradeDnsServersToCurrent();
@@ -354,6 +359,19 @@ class SingBox extends AbstractProtocol
         // >= 1.13.0: 移除已删除的 block/dns 出站
         if (version_compare($coreVersion, '1.13.0', '>=')) {
             $this->upgradeSpecialOutboundsToActions();
+        }
+
+        // >= 1.14.0: remote rule sets use the shared HTTP client.  The
+        // dedicated client deliberately has no detour, so rule downloads do
+        // not depend on a proxy outbound that has not started yet.
+        if (version_compare($coreVersion, '1.14.0', '>=')) {
+            $this->upgradeRuleSetHttpClient();
+        }
+
+        // < 1.14.0: shared HTTP clients are unavailable.  Keep remote rule
+        // sets bootstrappable through the legacy direct download detour.
+        if (version_compare($coreVersion, '1.14.0', '<')) {
+            $this->downgradeRuleSetHttpClient();
         }
 
         // < 1.11.0: rule action 和入站 action 降级为旧格式
@@ -374,6 +392,106 @@ class SingBox extends AbstractProtocol
         if (version_compare($coreVersion, '1.10.0', '<')) {
             $this->convertTunAddressToLegacy();
         }
+    }
+
+    private function upgradeRuleSetHttpClient(): void
+    {
+        $ruleSets = $this->config['route']['rule_set'] ?? [];
+        $usesDirectClient = false;
+
+        foreach ($ruleSets as &$ruleSet) {
+            if (($ruleSet['type'] ?? null) !== 'remote') {
+                continue;
+            }
+
+            if (($ruleSet['download_detour'] ?? null) === '自动选择') {
+                unset($ruleSet['download_detour']);
+                $ruleSet['http_client'] = 'rule-set-direct';
+            }
+
+            if (($ruleSet['http_client'] ?? null) === 'rule-set-direct') {
+                $usesDirectClient = true;
+            }
+        }
+        unset($ruleSet);
+
+        $this->config['route']['rule_set'] = $ruleSets;
+        if (!$usesDirectClient) {
+            return;
+        }
+
+        $clients = $this->config['http_clients'] ?? [];
+        $hasDirectClient = false;
+        foreach ($clients as $client) {
+            if (($client['tag'] ?? null) === 'rule-set-direct') {
+                $hasDirectClient = true;
+                break;
+            }
+        }
+        if (!$hasDirectClient) {
+            $clients[] = [
+                'tag' => 'rule-set-direct',
+                'engine' => 'go',
+                'connect_timeout' => '15s',
+            ];
+        }
+
+        $this->config['http_clients'] = $clients;
+        $this->config['route']['default_http_client'] = 'rule-set-direct';
+    }
+
+    private function usePanelHostedRuleSets(): void
+    {
+        if (!isset($this->config['route']['rule_set'])) {
+            return;
+        }
+
+        $baseUrl = rtrim((string) (admin_setting('app_url') ?: request()->getSchemeAndHttpHost()), '/');
+        $this->replaceOfficialRuleSetUrls($baseUrl);
+    }
+
+    private function replaceOfficialRuleSetUrls(string $baseUrl): void
+    {
+        $hostedRules = [
+            'geosite-cn' => $baseUrl . '/rules/geosite-cn.srs',
+            'geoip-cn' => $baseUrl . '/rules/geoip-cn.srs',
+        ];
+
+        foreach ($this->config['route']['rule_set'] as &$ruleSet) {
+            $tag = $ruleSet['tag'] ?? null;
+            $url = $ruleSet['url'] ?? null;
+            if (!isset($hostedRules[$tag]) || !is_string($url)) {
+                continue;
+            }
+
+            if (
+                str_starts_with($url, 'https://raw.githubusercontent.com/SagerNet/')
+                || str_starts_with($url, 'https://cdn.jsdelivr.net/gh/SagerNet/')
+                || str_contains($url, '/rules/' . $tag . '.srs')
+            ) {
+                $ruleSet['url'] = $hostedRules[$tag];
+            }
+        }
+        unset($ruleSet);
+    }
+
+    private function downgradeRuleSetHttpClient(): void
+    {
+        unset($this->config['http_clients'], $this->config['route']['default_http_client']);
+
+        if (!isset($this->config['route']['rule_set'])) {
+            return;
+        }
+
+        foreach ($this->config['route']['rule_set'] as &$ruleSet) {
+            if (($ruleSet['http_client'] ?? null) !== 'rule-set-direct') {
+                continue;
+            }
+
+            unset($ruleSet['http_client']);
+            $ruleSet['download_detour'] = 'direct';
+        }
+        unset($ruleSet);
     }
 
     /**
