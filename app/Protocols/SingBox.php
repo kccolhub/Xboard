@@ -143,7 +143,7 @@ class SingBox extends AbstractProtocol
         $config['dns']['strategy'] = 'ipv4_only';
 
         foreach ($config['dns']['rules'] ?? [] as &$rule) {
-            if (($rule['action'] ?? null) === 'route') {
+            if (($rule['action'] ?? null) === 'route' || isset($rule['server'])) {
                 $rule['strategy'] = 'ipv4_only';
             }
         }
@@ -152,12 +152,19 @@ class SingBox extends AbstractProtocol
         $config['route']['default_domain_resolver'] ??= ['server' => 'local'];
         $config['route']['default_domain_resolver']['strategy'] = 'ipv4_only';
 
+        $legacyResolveInbounds = [];
         foreach ($config['inbounds'] ?? [] as &$inbound) {
             if (($inbound['type'] ?? null) === 'tun' && isset($inbound['address'])) {
                 $inbound['address'] = array_values(array_filter(
                     (array) $inbound['address'],
                     fn ($address) => !str_contains((string) $address, ':')
                 ));
+            }
+            if (array_key_exists('domain_strategy', $inbound)) {
+                $inbound['domain_strategy'] = 'ipv4_only';
+                if (isset($inbound['tag'])) {
+                    $legacyResolveInbounds[$inbound['tag']] = true;
+                }
             }
         }
         unset($inbound);
@@ -186,7 +193,7 @@ class SingBox extends AbstractProtocol
 
         foreach ($config['inbounds'] ?? [] as $inbound) {
             $tag = $inbound['tag'] ?? null;
-            if ($tag === null || isset($resolveInbounds[$tag])) {
+            if ($tag === null || isset($resolveInbounds[$tag]) || isset($legacyResolveInbounds[$tag])) {
                 continue;
             }
 

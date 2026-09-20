@@ -125,7 +125,7 @@ class SingBoxTest extends TestCase
                 'rules' => [['action' => 'route', 'server' => 'local']],
             ],
             'inbounds' => [
-                ['tag' => 'tun-in', 'type' => 'tun', 'address' => ['172.19.0.1/30', '2001:db8::1/64']],
+                ['tag' => 'tun-in', 'type' => 'tun', 'domain_strategy' => 'prefer_ipv4', 'address' => ['172.19.0.1/30', '2001:db8::1/64']],
             ],
             'route' => ['rules' => []],
         ];
@@ -136,8 +136,8 @@ class SingBoxTest extends TestCase
         $this->assertSame('ipv4_only', $result['dns']['rules'][0]['strategy']);
         $this->assertSame('ipv4_only', $result['route']['default_domain_resolver']['strategy']);
         $this->assertSame(['172.19.0.1/30'], $result['inbounds'][0]['address']);
-        $this->assertSame('ipv4_only', $result['route']['rules'][0]['strategy']);
-        $this->assertSame('tun-in', $result['route']['rules'][0]['inbound']);
+        $this->assertSame('ipv4_only', $result['inbounds'][0]['domain_strategy']);
+        $this->assertArrayNotHasKey('strategy', $result['route']['rules'][0] ?? []);
     }
 
     private function normalizeDnsDetours(array $config): array
