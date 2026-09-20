@@ -128,8 +128,77 @@ class SingBox extends AbstractProtocol
     protected function loadConfig()
     {
         $jsonData = subscribe_template('singbox');
+        $config = is_array($jsonData) ? $jsonData : json_decode($jsonData, true);
 
-        return is_array($jsonData) ? $jsonData : json_decode($jsonData, true);
+        if (!is_array($config)) {
+            return $config;
+        }
+
+        return $this->forceIpv4Only($config);
+    }
+
+    /** Ensure generated subscriptions never resolve or route through IPv6. */
+    private function forceIpv4Only(array $config): array
+    {
+        $config['dns']['strategy'] = 'ipv4_only';
+
+        foreach ($config['dns']['rules'] ?? [] as &$rule) {
+            if (($rule['action'] ?? null) === 'route') {
+                $rule['strategy'] = 'ipv4_only';
+            }
+        }
+        unset($rule);
+
+        $config['route']['default_domain_resolver'] ??= ['server' => 'local'];
+        $config['route']['default_domain_resolver']['strategy'] = 'ipv4_only';
+
+        foreach ($config['inbounds'] ?? [] as &$inbound) {
+            if (($inbound['type'] ?? null) === 'tun' && isset($inbound['address'])) {
+                $inbound['address'] = array_values(array_filter(
+                    (array) $inbound['address'],
+                    fn ($address) => !str_contains((string) $address, ':')
+                ));
+            }
+        }
+        unset($inbound);
+
+        $resolveInbounds = [];
+        foreach ($config['route']['rules'] ?? [] as &$rule) {
+            if (($rule['action'] ?? null) !== 'resolve') {
+                continue;
+            }
+
+            $rule['strategy'] = 'ipv4_only';
+            $targets = $rule['inbound'] ?? [];
+            $targets = is_array($targets) ? $targets : [$targets];
+            if ($targets === []) {
+                foreach ($config['inbounds'] ?? [] as $inbound) {
+                    if (isset($inbound['tag'])) {
+                        $resolveInbounds[$inbound['tag']] = true;
+                    }
+                }
+            }
+            foreach ($targets as $tag) {
+                $resolveInbounds[$tag] = true;
+            }
+        }
+        unset($rule);
+
+        foreach ($config['inbounds'] ?? [] as $inbound) {
+            $tag = $inbound['tag'] ?? null;
+            if ($tag === null || isset($resolveInbounds[$tag])) {
+                continue;
+            }
+
+            array_unshift($config['route']['rules'], [
+                'inbound' => $tag,
+                'action' => 'resolve',
+                'strategy' => 'ipv4_only',
+            ]);
+            $resolveInbounds[$tag] = true;
+        }
+
+        return $config;
     }
 
     protected function buildOutbounds()
@@ -836,7 +905,7 @@ class SingBox extends AbstractProtocol
                 }
             }
             if ($tag !== null && array_key_exists($tag, $resolveStrategies)) {
-                $inbound['domain_strategy'] = $resolveStrategies[$tag] ?? 'prefer_ipv4';
+                $inbound['domain_strategy'] = $resolveStrategies[$tag] ?? 'ipv4_only';
             }
         }
         unset($inbound);
@@ -861,7 +930,7 @@ class SingBox extends AbstractProtocol
                 $inbound['sniff_override_destination'] = true;
             }
             if (!isset($inbound['domain_strategy'])) {
-                $inbound['domain_strategy'] = 'prefer_ipv4';
+                $inbound['domain_strategy'] = 'ipv4_only';
             }
         }
         unset($inbound);

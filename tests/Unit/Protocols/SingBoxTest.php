@@ -117,6 +117,29 @@ class SingBoxTest extends TestCase
         $this->assertSame('https://rules.example/custom.srs', $result['route']['rule_set'][1]['url']);
     }
 
+    public function test_it_forces_ipv4_only_for_dns_resolution_and_tun_addresses(): void
+    {
+        $config = [
+            'dns' => [
+                'strategy' => 'prefer_ipv4',
+                'rules' => [['action' => 'route', 'server' => 'local']],
+            ],
+            'inbounds' => [
+                ['tag' => 'tun-in', 'type' => 'tun', 'address' => ['172.19.0.1/30', '2001:db8::1/64']],
+            ],
+            'route' => ['rules' => []],
+        ];
+
+        $result = $this->invokeConfigMethod($config, 'forceIpv4Only');
+
+        $this->assertSame('ipv4_only', $result['dns']['strategy']);
+        $this->assertSame('ipv4_only', $result['dns']['rules'][0]['strategy']);
+        $this->assertSame('ipv4_only', $result['route']['default_domain_resolver']['strategy']);
+        $this->assertSame(['172.19.0.1/30'], $result['inbounds'][0]['address']);
+        $this->assertSame('ipv4_only', $result['route']['rules'][0]['strategy']);
+        $this->assertSame('tun-in', $result['route']['rules'][0]['inbound']);
+    }
+
     private function normalizeDnsDetours(array $config): array
     {
         return $this->invokeConfigMethod($config, 'removeEmptyDirectDnsDetours');

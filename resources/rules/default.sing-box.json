@@ -4,17 +4,20 @@
             {
                 "clash_mode": "global",
                 "action": "route",
-                "server": "remote"
+                "server": "remote",
+                "strategy": "ipv4_only"
             },
             {
                 "clash_mode": "direct",
                 "action": "route",
-                "server": "local"
+                "server": "local",
+                "strategy": "ipv4_only"
             },
             {
                 "rule_set": ["geosite-cn"],
                 "action": "route",
-                "server": "local"
+                "server": "local",
+                "strategy": "ipv4_only"
             }
         ],
         "servers": [
@@ -30,7 +33,7 @@
                 "tag": "local"
             }
         ],
-        "strategy": "prefer_ipv4"
+        "strategy": "ipv4_only"
     },
     "experimental": {
         "cache_file": {
@@ -50,7 +53,7 @@
     "inbounds": [
         {
             "auto_route": true,
-            "address": ["172.19.0.1/30", "2001:0470:f9da:fdfa::1/64"],
+            "address": ["172.19.0.1/30"],
             "mtu": 9000,
             "stack": "system",
             "strict_route": true,
@@ -91,9 +94,25 @@
         "auto_detect_interface": true,
         "default_http_client": "rule-set-direct",
         "default_domain_resolver": {
-            "server": "local"
+            "server": "local",
+            "strategy": "ipv4_only"
         },
         "rules": [
+            {
+                "inbound": "tun-in",
+                "action": "resolve",
+                "strategy": "ipv4_only"
+            },
+            {
+                "inbound": "socks-in",
+                "action": "resolve",
+                "strategy": "ipv4_only"
+            },
+            {
+                "inbound": "mixed-in",
+                "action": "resolve",
+                "strategy": "ipv4_only"
+            },
             {
                 "action": "sniff"
             },
