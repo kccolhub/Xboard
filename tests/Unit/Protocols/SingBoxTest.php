@@ -127,17 +127,23 @@ class SingBoxTest extends TestCase
             'inbounds' => [
                 ['tag' => 'tun-in', 'type' => 'tun', 'domain_strategy' => 'prefer_ipv4', 'address' => ['172.19.0.1/30', '2001:db8::1/64']],
             ],
-            'route' => ['rules' => []],
+            'outbounds' => [
+                ['tag' => 'proxy', 'type' => 'vmess', 'domain_strategy' => 'prefer_ipv4'],
+            ],
+            'route' => [
+                'rules' => [['inbound' => 'tun-in', 'action' => 'resolve', 'strategy' => 'prefer_ipv4']],
+            ],
         ];
 
-        $result = $this->invokeConfigMethod($config, 'forceIpv4Only');
+        $result = $this->invokeConfigMethod($config, 'forceIpv4Only', [$config]);
 
         $this->assertSame('ipv4_only', $result['dns']['strategy']);
         $this->assertSame('ipv4_only', $result['dns']['rules'][0]['strategy']);
         $this->assertSame('ipv4_only', $result['route']['default_domain_resolver']['strategy']);
         $this->assertSame(['172.19.0.1/30'], $result['inbounds'][0]['address']);
         $this->assertSame('ipv4_only', $result['inbounds'][0]['domain_strategy']);
-        $this->assertArrayNotHasKey('strategy', $result['route']['rules'][0] ?? []);
+        $this->assertSame('ipv4_only', $result['route']['rules'][0]['strategy']);
+        $this->assertSame('ipv4_only', $result['outbounds'][0]['domain_strategy']);
     }
 
     private function normalizeDnsDetours(array $config): array
@@ -155,8 +161,8 @@ class SingBoxTest extends TestCase
         $configProperty->setValue($protocol, $config);
 
         $method = $reflection->getMethod($methodName);
-        $method->invoke($protocol, ...$arguments);
+        $result = $method->invoke($protocol, ...$arguments);
 
-        return $configProperty->getValue($protocol);
+        return is_array($result) ? $result : $configProperty->getValue($protocol);
     }
 }

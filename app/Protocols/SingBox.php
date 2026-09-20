@@ -140,20 +140,25 @@ class SingBox extends AbstractProtocol
     /** Ensure generated subscriptions never resolve or route through IPv6. */
     private function forceIpv4Only(array $config): array
     {
+        $config['dns'] ??= [];
+        $config['route'] ??= [];
         $config['dns']['strategy'] = 'ipv4_only';
 
-        foreach ($config['dns']['rules'] ?? [] as &$rule) {
-            if (($rule['action'] ?? null) === 'route' || isset($rule['server'])) {
-                $rule['strategy'] = 'ipv4_only';
+        if (isset($config['dns']['rules']) && is_array($config['dns']['rules'])) {
+            foreach ($config['dns']['rules'] as &$rule) {
+                if (($rule['action'] ?? null) === 'route' || isset($rule['server'])) {
+                    $rule['strategy'] = 'ipv4_only';
+                }
             }
+            unset($rule);
         }
-        unset($rule);
 
         $config['route']['default_domain_resolver'] ??= ['server' => 'local'];
         $config['route']['default_domain_resolver']['strategy'] = 'ipv4_only';
 
         $legacyResolveInbounds = [];
-        foreach ($config['inbounds'] ?? [] as &$inbound) {
+        if (isset($config['inbounds']) && is_array($config['inbounds'])) {
+            foreach ($config['inbounds'] as &$inbound) {
             if (($inbound['type'] ?? null) === 'tun' && isset($inbound['address'])) {
                 $inbound['address'] = array_values(array_filter(
                     (array) $inbound['address'],
@@ -166,30 +171,45 @@ class SingBox extends AbstractProtocol
                     $legacyResolveInbounds[$inbound['tag']] = true;
                 }
             }
+            }
+            unset($inbound);
         }
-        unset($inbound);
+
+        // Keep any template-provided per-outbound resolver preferences from
+        // falling back to IPv6.  We only touch the field when it already
+        // exists because older sing-box cores reject unknown outbound fields.
+        if (isset($config['outbounds']) && is_array($config['outbounds'])) {
+            foreach ($config['outbounds'] as &$outbound) {
+            if (array_key_exists('domain_strategy', $outbound)) {
+                $outbound['domain_strategy'] = 'ipv4_only';
+            }
+            }
+            unset($outbound);
+        }
 
         $resolveInbounds = [];
-        foreach ($config['route']['rules'] ?? [] as &$rule) {
-            if (($rule['action'] ?? null) !== 'resolve') {
-                continue;
-            }
+        if (isset($config['route']['rules']) && is_array($config['route']['rules'])) {
+            foreach ($config['route']['rules'] as &$rule) {
+                if (($rule['action'] ?? null) !== 'resolve') {
+                    continue;
+                }
 
-            $rule['strategy'] = 'ipv4_only';
-            $targets = $rule['inbound'] ?? [];
-            $targets = is_array($targets) ? $targets : [$targets];
-            if ($targets === []) {
-                foreach ($config['inbounds'] ?? [] as $inbound) {
-                    if (isset($inbound['tag'])) {
-                        $resolveInbounds[$inbound['tag']] = true;
+                $rule['strategy'] = 'ipv4_only';
+                $targets = $rule['inbound'] ?? [];
+                $targets = is_array($targets) ? $targets : [$targets];
+                if ($targets === []) {
+                    foreach ($config['inbounds'] ?? [] as $inbound) {
+                        if (isset($inbound['tag'])) {
+                            $resolveInbounds[$inbound['tag']] = true;
+                        }
                     }
                 }
+                foreach ($targets as $tag) {
+                    $resolveInbounds[$tag] = true;
+                }
             }
-            foreach ($targets as $tag) {
-                $resolveInbounds[$tag] = true;
-            }
+            unset($rule);
         }
-        unset($rule);
 
         foreach ($config['inbounds'] ?? [] as $inbound) {
             $tag = $inbound['tag'] ?? null;
