@@ -38,6 +38,10 @@ class CertificateGeneratorTest extends TestCase
         $this->assertSame('CA:FALSE', $certificate['extensions']['basicConstraints']);
         $this->assertStringContainsString('TLS Web Server Authentication', $certificate['extensions']['extendedKeyUsage']);
         $this->assertTrue(openssl_x509_check_private_key($result['cert_content'], $result['key_content']));
+        $keyDetails = openssl_pkey_get_details(openssl_pkey_get_private($result['key_content']));
+        $this->assertSame(OPENSSL_KEYTYPE_EC, $keyDetails['type']);
+        $this->assertSame('prime256v1', $keyDetails['ec']['curve_name']);
+        $this->assertSame(256, $keyDetails['bits']);
         $this->assertSame(1, openssl_x509_verify($result['cert_content'], openssl_pkey_get_public($result['cert_content'])));
         $this->assertGreaterThan(time() + 3649 * 86400, $certificate['validTo_time_t']);
         $this->assertSame(openssl_x509_fingerprint($result['cert_content'], 'sha256'), $result['pinSHA256']);

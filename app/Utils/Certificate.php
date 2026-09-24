@@ -19,7 +19,9 @@ class Certificate
 
         // The validated name cannot inject OpenSSL configuration directives.
         $san = ($isIp ? 'IP:' : 'DNS:') . $domain;
-        $configuration = "[req]\ndistinguished_name=dn\n[dn]\n[v3_leaf]\n"
+        // PHP 8.2 validates default_bits before selecting the EC curve, even
+        // though the EC key size is determined by prime256v1 below.
+        $configuration = "[req]\ndefault_bits=2048\ndistinguished_name=dn\n[dn]\n[v3_leaf]\n"
             . "basicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature\n"
             . "extendedKeyUsage=serverAuth\nsubjectAltName={$san}\n";
         $path = tempnam(sys_get_temp_dir(), 'xboard-cert-');
