@@ -109,6 +109,31 @@ class SingBox extends AbstractProtocol
         ]
     ];
 
+    /** Build just one proxy, without template rules, selectors or direct fallback. */
+    public function buildProbeOutbound(): array
+    {
+        if (count($this->servers) !== 1) {
+            throw new \InvalidArgumentException('Node is not supported by this sing-box version');
+        }
+        $server = array_values($this->servers)[0];
+        $method = match ($server['type']) {
+            Server::TYPE_SHADOWSOCKS => 'buildShadowsocks',
+            Server::TYPE_TROJAN => 'buildTrojan',
+            Server::TYPE_VMESS => 'buildVmess',
+            Server::TYPE_VLESS => 'buildVless',
+            Server::TYPE_HYSTERIA => 'buildHysteria',
+            Server::TYPE_TUIC => 'buildTuic',
+            Server::TYPE_ANYTLS => 'buildAnyTLS',
+            Server::TYPE_SOCKS => 'buildSocks',
+            Server::TYPE_HTTP => 'buildHttp',
+            default => throw new \InvalidArgumentException('Unsupported node protocol'),
+        };
+        $password = $server['type'] === Server::TYPE_SHADOWSOCKS ? $server['password'] : $this->user['uuid'];
+        $outbound = $this->$method($password, $server);
+        $outbound['tag'] = 'probe';
+        return $outbound;
+    }
+
     public function handle()
     {
         $appName = admin_setting('app_name', 'XBoard');

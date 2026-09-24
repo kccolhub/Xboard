@@ -8,6 +8,7 @@ use App\Http\Requests\Admin\ServerSave;
 use App\Models\Server;
 use App\Models\ServerGroup;
 use App\Services\ServerService;
+use App\Services\NodeHttpProbeService;
 use App\Utils\Certificate;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -20,9 +21,19 @@ class ManageController extends Controller
         $servers = ServerService::getAllServers()->map(function ($item) {
             $item['groups'] = ServerGroup::whereIn('id', $item['group_ids'] ?? [])->get(['name', 'id']);
             $item['parent'] = $item->parent;
+            $item['http_test'] = app(NodeHttpProbeService::class)->latest($item);
             return $item;
         });
         return $this->success($servers);
+    }
+
+    public function testHttp(Request $request, NodeHttpProbeService $probe)
+    {
+        $data = $request->validate(['id' => 'required|integer|min:1']);
+        $server = Server::find($data['id']);
+        if (!$server) return $this->fail([400202, '服务器不存在']);
+        return $this->success($probe->test($server, $request->user('sanctum')))
+            ->header('Cache-Control', 'no-store');
     }
 
     public function sort(Request $request)
