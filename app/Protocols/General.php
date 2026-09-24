@@ -4,6 +4,7 @@ namespace App\Protocols;
 
 use App\Models\Server;
 use App\Utils\Helper;
+use App\Utils\Certificate;
 use Illuminate\Support\Arr;
 use App\Support\AbstractProtocol;
 
@@ -336,6 +337,17 @@ class General extends AbstractProtocol
         $addr = Helper::wrapIPv6($server['host']);
 
         if ($version === 2) {
+            foreach (['up' => 'upmbps', 'down' => 'downmbps'] as $direction => $parameter) {
+                if (($mbps = data_get($protocol_settings, 'bandwidth.' . $direction)) > 0) {
+                    $params[$parameter] = $mbps;
+                }
+            }
+            if (($fingerprint = Certificate::contentFingerprint($server)) !== null) {
+                $params['security'] = 'tls';
+                $params['pinSHA256'] = $fingerprint;
+                $params['disable_sni'] = empty($params['sni']) ? '1' : '0';
+                $params['fastopen'] = '0';
+            }
             if (data_get($protocol_settings, 'obfs.open')) {
                 $params['obfs'] = 'salamander';
                 $params['obfs-password'] = data_get($protocol_settings, 'obfs.password');

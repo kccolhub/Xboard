@@ -3,6 +3,7 @@
 namespace App\Protocols;
 
 use App\Utils\Helper;
+use App\Utils\Certificate;
 use App\Support\AbstractProtocol;
 use App\Models\Server;
 
@@ -395,6 +396,12 @@ class Shadowrocket extends AbstractProtocol
                     $params['obfs-password'] = data_get($protocol_settings, 'obfs.password');
                 }
                 $params['insecure'] = data_get($protocol_settings, 'tls.allow_insecure');
+                if (($fingerprint = Certificate::contentFingerprint($server)) !== null) {
+                    $params['security'] = 'tls';
+                    $params['pinSHA256'] = $fingerprint;
+                    $params['disable_sni'] = empty($params['peer']) ? '1' : '0';
+                    $params['fastopen'] = '0';
+                }
                 if (isset($protocol_settings['hop_interval'])) {
                     $params['keepalive'] = data_get($protocol_settings, 'hop_interval');
                 }

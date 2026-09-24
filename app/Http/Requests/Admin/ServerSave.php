@@ -4,6 +4,9 @@
 namespace App\Http\Requests\Admin;
 
 use App\Models\Server;
+use App\Utils\Certificate;
+use Illuminate\Validation\Validator;
+use InvalidArgumentException;
 use Illuminate\Foundation\Http\FormRequest;
 
 class ServerSave extends FormRequest
@@ -134,6 +137,9 @@ class ServerSave extends FormRequest
             'custom_outbounds' => 'nullable|array',
             'custom_routes' => 'nullable|array',
             'cert_config' => 'nullable|array',
+            'cert_config.mode' => 'nullable|string',
+            'cert_config.cert_mode' => 'nullable|string',
+            'cert_config.cert_content' => 'nullable|string',
             'rate_time_ranges.*.start' => 'required_with:rate_time_ranges|string|date_format:H:i',
             'rate_time_ranges.*.end' => 'required_with:rate_time_ranges|string|date_format:H:i',
             'rate_time_ranges.*.rate' => 'required_with:rate_time_ranges|numeric|min:0',
@@ -237,6 +243,22 @@ class ServerSave extends FormRequest
         }
 
         return $rules;
+    }
+
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function (Validator $validator) {
+            if ($validator->errors()->isNotEmpty()
+                || $this->input('type') !== Server::TYPE_HYSTERIA
+                || (int) $this->input('protocol_settings.version') !== 2) {
+                return;
+            }
+            try {
+                Certificate::contentFingerprint(['cert_config' => $this->input('cert_config')]);
+            } catch (InvalidArgumentException $e) {
+                $validator->errors()->add('cert_config.cert_content', '内容推送模式需要有效的 PEM 证书，才能生成订阅证书指纹。');
+            }
+        });
     }
 
     public function attributes(): array

@@ -8,6 +8,7 @@ use App\Http\Requests\Admin\ServerSave;
 use App\Models\Server;
 use App\Models\ServerGroup;
 use App\Services\ServerService;
+use App\Utils\Certificate;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -341,5 +342,18 @@ class ManageController extends Controller
             'key' => $keyPem,
             'config' => $configPem,
         ]);
+    }
+
+    public function generateCertificate(Request $request)
+    {
+        $data = $request->validate(['domain' => 'required|string|max:253']);
+        try {
+            $certificate = Certificate::generate($data['domain']);
+        } catch (\InvalidArgumentException $e) {
+            throw new ApiException($e->getMessage(), 422);
+        } catch (\RuntimeException $e) {
+            throw new ApiException('证书生成失败，请检查服务器 OpenSSL 配置。', 500);
+        }
+        return $this->success($certificate)->header('Cache-Control', 'no-store');
     }
 }
