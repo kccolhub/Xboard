@@ -137,9 +137,6 @@ class ServerSave extends FormRequest
             'custom_outbounds' => 'nullable|array',
             'custom_routes' => 'nullable|array',
             'cert_config' => 'nullable|array',
-            'cert_config.mode' => 'nullable|string',
-            'cert_config.cert_mode' => 'nullable|string',
-            'cert_config.cert_content' => 'nullable|string',
             'rate_time_ranges.*.start' => 'required_with:rate_time_ranges|string|date_format:H:i',
             'rate_time_ranges.*.end' => 'required_with:rate_time_ranges|string|date_format:H:i',
             'rate_time_ranges.*.rate' => 'required_with:rate_time_ranges|numeric|min:0',
@@ -248,15 +245,36 @@ class ServerSave extends FormRequest
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator) {
+            if ($validator->errors()->isNotEmpty()) {
+                return;
+            }
+            $config = $this->input('cert_config') ?? [];
+            // Keep cert_config as a whole in validated(). Nested field rules
+            // silently strip other keys, including the private key, on save.
+            foreach (['mode', 'cert_mode', 'cert_content', 'key_content'] as $field) {
+                if (isset($config[$field]) && !is_string($config[$field])) {
+                    $validator->errors()->add('cert_config.' . $field, '证书配置字段必须为字符串。');
+                }
+            }
             if ($validator->errors()->isNotEmpty()
                 || $this->input('type') !== Server::TYPE_HYSTERIA
                 || (int) $this->input('protocol_settings.version') !== 2) {
                 return;
             }
             try {
-                Certificate::contentFingerprint(['cert_config' => $this->input('cert_config')]);
+                if (Certificate::contentFingerprint(['cert_config' => $config]) === null) {
+                    return;
+                }
             } catch (InvalidArgumentException $e) {
                 $validator->errors()->add('cert_config.cert_content', '内容推送模式需要有效的 PEM 证书，才能生成订阅证书指纹。');
+                return;
+            }
+            // Extract PEM blocks so OpenSSL never interprets file:// references.
+            preg_match('/-----BEGIN CERTIFICATE-----[A-Za-z0-9+\/=\s]+-----END CERTIFICATE-----/', $config['cert_content'], $certificate);
+            $key = $config['key_content'] ?? '';
+            if (!preg_match('/-----BEGIN (PRIVATE KEY|RSA PRIVATE KEY|EC PRIVATE KEY)-----[A-Za-z0-9+\/=\s]+-----END \1-----/', $key, $privateKey)
+                || !@openssl_x509_check_private_key($certificate[0], $privateKey[0])) {
+                $validator->errors()->add('cert_config.key_content', '内容推送模式需要与证书匹配的 PEM 私钥，请重新生成或同时填写证书和私钥。');
             }
         });
     }

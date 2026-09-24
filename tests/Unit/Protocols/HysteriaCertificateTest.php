@@ -181,6 +181,42 @@ class HysteriaCertificateTest extends TestCase
         }
     }
 
+    public function test_admin_validated_payload_preserves_the_complete_certificate_configuration(): void
+    {
+        $factory = new Factory(new Translator(new ArrayLoader(), 'en'));
+        foreach (['content', 'dns', 'file'] as $mode) {
+            $server = $this->server();
+            $server['server_port'] = $server['port'];
+            $server['rate'] = 1;
+            $server['cert_config'] += ['domain' => 'node.example.com', 'email' => 'admin@example.com',
+                'dns_provider' => 'cloudflare', 'dns_env' => ['CF_API_TOKEN' => 'test-only'],
+                'cert_file' => '/example/cert.pem', 'key_file' => '/example/key.pem'];
+            $server['cert_config']['mode'] = $mode;
+            $request = ServerSave::create('/', 'POST', $server);
+            $validator = $factory->make($server, $request->rules());
+            $request->withValidator($validator);
+            // The controller persists validated(), not the raw request.
+            $this->assertSame($server['cert_config'], $validator->validated()['cert_config']);
+        }
+    }
+
+    public function test_admin_save_rejects_missing_invalid_or_mismatched_private_key(): void
+    {
+        $factory = new Factory(new Translator(new ArrayLoader(), 'en'));
+        [, $otherKey] = self::makeCertificate('other.example.com');
+        foreach ([null, '', 'invalid', ['invalid shape'], 'file:///example/key.pem', $otherKey] as $key) {
+            $server = $this->server();
+            $server['server_port'] = $server['port'];
+            $server['rate'] = 1;
+            $server['cert_config']['key_content'] = $key;
+            $request = ServerSave::create('/', 'POST', $server);
+            $validator = $factory->make($server, $request->rules());
+            $request->withValidator($validator);
+            $this->assertFalse($validator->passes());
+            $this->assertArrayHasKey('cert_config.key_content', $validator->errors()->toArray());
+        }
+    }
+
     #[DataProvider('generators')]
     public function test_no_certificate_config_ipv6_and_port_hopping_still_work(string $generator): void
     {

@@ -1,9 +1,13 @@
 <?php
 
 // Run in the production image: no PHPUnit/dev dependencies or real node data.
-require __DIR__ . '/../../app/Utils/Certificate.php';
+require __DIR__ . '/../../vendor/autoload.php';
 
+use App\Http\Requests\Admin\ServerSave;
 use App\Utils\Certificate;
+use Illuminate\Translation\ArrayLoader;
+use Illuminate\Translation\Translator;
+use Illuminate\Validation\Factory;
 
 // Match Laravel's warning-to-exception behavior on PHP 8.2.
 set_error_handler(static function ($severity, $message, $file, $line) {
@@ -25,6 +29,17 @@ try {
         }
     }
     fwrite(STDOUT, 'Certificate generation smoke passed on PHP ' . PHP_VERSION . PHP_EOL);
+    $server = ['name' => 'certificate-smoke', 'type' => 'hysteria', 'host' => '192.0.2.1',
+        'port' => 443, 'server_port' => 443, 'rate' => 1, 'protocol_settings' => ['version' => 2],
+        'cert_config' => ['cert_mode' => 'content'] + $result];
+    $request = ServerSave::create('/', 'POST', $server);
+    $factory = new Factory(new Translator(new ArrayLoader(), 'en'));
+    $validator = $factory->make($server, $request->rules());
+    $request->withValidator($validator);
+    if ($validator->validated()['cert_config'] !== $server['cert_config']) {
+        throw new RuntimeException('Certificate save stripped configuration fields.');
+    }
+    fwrite(STDOUT, 'Certificate save preserves matching private key and domain' . PHP_EOL);
 } finally {
     restore_error_handler();
 }
