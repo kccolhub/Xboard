@@ -80,7 +80,7 @@ class NodeHttpProbeService
     private function fingerprint(Server $server): string
     {
         return hash('sha256', json_encode([$server->host, $server->port, $server->type, $server->enabled,
-            $server->protocol_settings, $server->group_ids, $server->updated_at, config('node_probe.version')]));
+            $server->protocol_settings, $server->cert_config, $server->group_ids, $server->updated_at, config('node_probe.version')]));
     }
 
     private function unavailable(string $code, string $message): array

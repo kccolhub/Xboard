@@ -12,6 +12,13 @@
 HTTP 503 等非预期响应保留真实状态码；无 HTTP 响应时区分超时、证书、认证、
 拒绝连接、解析等错误（部分握手错误只能归类为代理连接失败）。
 
+测试端为标准 TLS 节点加载 `cert_config` 的 content 模式公开证书，支持面板推送的
+自签名证书；不读取私钥，不改变原有 SNI 或 `allow_insecure`。严格模式仍验证
+证书有效期与主机名，Reality 不应用此信任设置。此处理仅影响 HTTP 测试，
+不改变用户订阅或节点配置。证书变更会使已有测试结果标为历史结果。
+`node_tls_certificate` 表示节点 TLS 校验失败，`target_tls_certificate` 表示
+目标网站 HTTPS 校验失败；`target_tls_ca` 表示面板目标 CA 文件无法读取。
+
 - 使用现有 SingBox 协议生成器，但不加载订阅路由模板、分流、自动选择、TUN
   或直连回退；测试失败不能自动切换到其他节点。
 - 优先使用属于该节点有效用户列表的当前管理员；否则使用列表中的首个有效用户。
@@ -60,6 +67,7 @@ PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs node tests/theme/node-http-probe
 ```
 
 端到端测试使用本地 HTTPS 服务器、Trojan 和带 Salamander 混淆的 Hysteria2
-服务端，验证 204、503、目标 TLS 验证、错误认证无直连回退、临时文件清理。
+服务端，使用真实探测配置生成器验证开启/关闭 ECH 的 204、503、自签名证书严格校验、缺少信任/
+错误证书/错误 SNI 拒绝、目标 TLS 验证、错误认证无直连回退、临时文件清理。
 浏览器测试使用真实管理端包和模拟 API，不访问生产账号；覆盖菜单、加载状态、
 成功/失败浮层、刷新保留和历史结果。截图位于 `/tmp/xboard-node-http-*.png`。

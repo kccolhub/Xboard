@@ -9,6 +9,7 @@ use App\Http\Middleware\Admin;
 use App\Protocols\SingBox;
 use App\Services\NodeHttpProbeRunner;
 use App\Services\NodeHttpProbeService;
+use App\Utils\Certificate;
 use Illuminate\Cache\ArrayStore;
 use Illuminate\Cache\Repository;
 use Illuminate\Config\Repository as Config;
@@ -142,6 +143,8 @@ class NodeHttpProbeTest extends TestCase
         $service->test($this->node(), null);
         $node = $this->node(); $node->host = '192.0.2.2';
         $this->assertTrue($service->latest($node)['stale']);
+        $node = $this->node(); $node->cert_config = ['cert_mode' => 'content', 'cert_content' => 'rotated'];
+        $this->assertTrue($service->latest($node)['stale']);
         $cached = Cache::get('node-http-probe:result:17');
         $cached['checked_at'] = time() - 301;
         Cache::put('node-http-probe:result:17', $cached, 86400);
@@ -172,7 +175,58 @@ class NodeHttpProbeTest extends TestCase
         $this->assertSame('authentication', $result['error_code']);
         $this->assertStringNotContainsString('secret-password', json_encode($result));
         $this->assertSame('timeout', (new NodeHttpProbeRunner)->networkFailure(28, '')['error_code']);
-        $this->assertSame('tls_certificate', (new NodeHttpProbeRunner)->networkFailure(0, 'x509: certificate invalid')['error_code']);
+        $node = (new NodeHttpProbeRunner)->networkFailure(0, 'secret-password x509: certificate invalid');
+        $this->assertSame('node_tls_certificate', $node['error_code']);
+        $this->assertStringNotContainsString('secret-password', json_encode($node));
+        // cURL validates the target HTTPS leg, not the node TLS leg. Its errno
+        // takes priority over unrelated sing-box log lines.
+        $this->assertSame('target_tls_certificate', (new NodeHttpProbeRunner)->networkFailure(60, 'certificate log')['error_code']);
+        $this->assertSame('target_tls_ca', (new NodeHttpProbeRunner)->networkFailure(77, '')['error_code']);
+    }
+
+    public function test_probe_trusts_only_public_content_certificate_without_changing_sni_or_insecure(): void
+    {
+        $cert = Certificate::generate('node.example');
+        foreach (['trojan', 'hysteria', 'tuic', 'anytls', 'vmess', 'vless', 'http'] as $type) {
+            $tls = ['server_name' => 'node.example', 'allow_insecure' => false];
+            $settings = ['tls' => 1, 'tls_settings' => $tls];
+            if (in_array($type, ['hysteria', 'tuic', 'anytls'], true)) {
+                $settings = ['version' => 2, 'tls' => $tls];
+            }
+            $node = ['type' => $type, 'name' => 'node', 'host' => '192.0.2.1', 'port' => 443,
+                'protocol_settings' => $settings, 'cert_config' => ['cert_mode' => 'content'] + $cert];
+            // Even accidentally concatenated private material must not enter the config.
+            $node['cert_config']['cert_content'] .= $cert['key_content'];
+            $build = fn(array $node) => (new SingBox(['uuid' => 'user-secret'], [$node], 'sing-box', '1.14.0'))->buildProbeOutbound();
+            $outbound = $build($node);
+            $this->assertSame([trim($cert['cert_content'])], $outbound['tls']['certificate'], $type);
+            $this->assertSame('node.example', $outbound['tls']['server_name'], $type);
+            $this->assertFalse($outbound['tls']['insecure'], $type);
+            $this->assertStringNotContainsString('PRIVATE KEY', json_encode($outbound), $type);
+            // File/ACME certificate modes still use normal public CA verification.
+            $node['cert_config'] = ['cert_mode' => 'file', 'cert_content' => 'not a PEM'];
+            $this->assertArrayNotHasKey('certificate', $build($node)['tls'], $type);
+        }
+    }
+
+    public function test_probe_does_not_apply_content_trust_to_reality_or_plaintext(): void
+    {
+        foreach (['trojan', 'vless', 'http'] as $type) {
+            $node = ['type' => $type, 'name' => 'node', 'host' => '192.0.2.1', 'port' => 443,
+                'protocol_settings' => ['tls' => $type === 'http' ? 0 : 2,
+                    'reality_settings' => ['server_name' => 'node.example', 'public_key' => 'key', 'short_id' => '01']],
+                'cert_config' => ['cert_mode' => 'content', 'cert_content' => 'irrelevant invalid PEM']];
+            $result = (new SingBox(['uuid' => 'user-secret'], [$node], 'sing-box', '1.14.0'))->buildProbeOutbound();
+            $this->assertArrayNotHasKey('certificate', $result['tls'] ?? []);
+        }
+    }
+
+    public function test_invalid_content_certificate_fails_closed(): void
+    {
+        $node = $this->node()->toArray();
+        $node['cert_config'] = ['cert_mode' => 'content', 'cert_content' => 'invalid'];
+        $this->expectException(\InvalidArgumentException::class);
+        (new SingBox(['uuid' => 'user-secret'], [$node], 'sing-box', '1.14.0'))->buildProbeOutbound();
     }
 
     public function test_hysteria_obfuscation_tls_and_password_match_subscription_builder(): void

@@ -124,7 +124,9 @@ class NodeHttpProbeRunner
     {
         $log = strtolower($log);
         [$code, $message] = match (true) {
-            str_contains($log, 'certificate'), str_contains($log, 'x509:'), $errno === 60 => ['tls_certificate', 'TLS 证书验证失败。'],
+            $errno === 60 => ['target_tls_certificate', '目标网站 HTTPS 证书验证失败（非节点证书），请检查面板 CA 与目标证书。'],
+            $errno === 77 => ['target_tls_ca', '面板无法读取目标网站 HTTPS 校验所需的 CA 证书文件。'],
+            str_contains($log, 'certificate'), str_contains($log, 'x509:') => ['node_tls_certificate', '节点 TLS 证书验证失败，请检查节点证书、有效期及 SNI 是否匹配。'],
             str_contains($log, 'authentication'), str_contains($log, 'unauthorized') => ['authentication', '节点认证失败。'],
             str_contains($log, 'refused') => ['connection_refused', '节点拒绝连接。'],
             str_contains($log, 'resolve'), str_contains($log, 'no such host') => ['dns', '域名解析失败。'],

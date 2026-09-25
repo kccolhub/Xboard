@@ -2,6 +2,7 @@
 namespace App\Protocols;
 
 use App\Utils\Helper;
+use App\Utils\Certificate;
 use Illuminate\Support\Arr;
 use App\Support\AbstractProtocol;
 use App\Models\Server;
@@ -131,6 +132,15 @@ class SingBox extends AbstractProtocol
         $password = $server['type'] === Server::TYPE_SHADOWSOCKS ? $server['password'] : $this->user['uuid'];
         $outbound = $this->$method($password, $server);
         $outbound['tag'] = 'probe';
+        // The panel already owns the certificate it pushes to this node. Trust it
+        // for this isolated probe without disabling chain, validity or SNI checks.
+        // Reality has its own authentication and must not use content certificates.
+        if (!empty($outbound['tls']['enabled']) && empty($outbound['tls']['reality']['enabled'])) {
+            $certificate = Certificate::contentPem($server);
+            if ($certificate !== null) {
+                $outbound['tls']['certificate'] = [$certificate];
+            }
+        }
         return $outbound;
     }
 

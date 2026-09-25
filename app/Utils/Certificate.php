@@ -66,6 +66,18 @@ class Certificate
      */
     public static function contentFingerprint(array $server): ?string
     {
+        $pem = self::contentPem($server);
+        if ($pem === null) return null;
+        $fingerprint = openssl_x509_fingerprint($pem, 'sha256');
+        if ($fingerprint === false) {
+            throw new InvalidArgumentException('Content certificate mode requires a valid PEM certificate.');
+        }
+        return strtolower($fingerprint);
+    }
+
+    /** Extract only the public leaf certificate pushed by the panel, never its key. */
+    public static function contentPem(array $server): ?string
+    {
         $config = $server['cert_config'] ?? [];
         $mode = $config['cert_mode'] ?? '';
         if ($mode === '') {
@@ -86,13 +98,9 @@ class Certificate
             throw new InvalidArgumentException('Content certificate mode requires a valid PEM certificate.');
         }
 
-        $certificate = @openssl_x509_read($matches[0]);
-        $fingerprint = $certificate === false ? false : openssl_x509_fingerprint($certificate, 'sha256');
-        if ($fingerprint === false) {
-            // Do not silently issue an unpinned insecure link or expose PEM in errors.
+        if (@openssl_x509_read($matches[0]) === false) {
             throw new InvalidArgumentException('Content certificate mode requires a valid PEM certificate.');
         }
-
-        return strtolower($fingerprint);
+        return trim($matches[0]);
     }
 }
