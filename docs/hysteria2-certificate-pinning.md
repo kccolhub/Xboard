@@ -54,7 +54,8 @@ hysteria2://PASSWORD@192.0.2.10:57683?insecure=1&upmbps=100&security=tls&pinSHA2
 - 保存 Hysteria 2 内容推送节点时会校验 PEM 证书。历史数据若存在缺失或无效的内容证书，
   会使该订阅生成失败，避免静默下发缺少指纹的不安全链接；请修正节点证书后重试。
 - `self`、`http`、`dns`、`file` 等模式不自动生成指纹；Xboard 没有节点实际证书。
-  Hysteria 1、其他协议以及 YAML/JSON 订阅不在此次改动范围内。
+  Hysteria 1 以及 YAML/JSON 订阅不在本文功能范围内。
+  Trojan 通用订阅的 `pcs` 支持见 [Trojan 内容推送证书指纹](trojan-certificate-pinning.md)。
 
 验证：
 

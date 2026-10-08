@@ -256,9 +256,11 @@ class ServerSave extends FormRequest
                     $validator->errors()->add('cert_config.' . $field, '证书配置字段必须为字符串。');
                 }
             }
-            if ($validator->errors()->isNotEmpty()
-                || $this->input('type') !== Server::TYPE_HYSTERIA
-                || (int) $this->input('protocol_settings.version') !== 2) {
+            $usesCertificatePin = ($this->input('type') === Server::TYPE_HYSTERIA
+                    && (int) $this->input('protocol_settings.version') === 2)
+                || ($this->input('type') === Server::TYPE_TROJAN
+                    && (int) $this->input('protocol_settings.tls', 1) !== 2);
+            if ($validator->errors()->isNotEmpty() || !$usesCertificatePin) {
                 return;
             }
             try {

@@ -263,6 +263,9 @@ class General extends AbstractProtocol
                 }
                 break;
             default: // Standard TLS
+                if (($fingerprint = Certificate::contentFingerprint($server)) !== null) {
+                    $array['pcs'] = $fingerprint;
+                }
                 $array['allowInsecure'] = (bool) data_get($protocol_settings, 'tls_settings.allow_insecure', false);
                 if ($serverName = data_get($protocol_settings, 'tls_settings.server_name')) {
                     $array['peer'] = $serverName;
