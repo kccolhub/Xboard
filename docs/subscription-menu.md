@@ -22,6 +22,12 @@ General uses `flag=general`. Automatic, General and the HY2-only format have no
 dedicated application scheme, so their import buttons are disabled with an
 explanatory label. QR protocol filtering keeps the selected format.
 
+SingBox QR codes wrap that format URL in
+`sing-box://import-remote-profile?url=<encoded subscription URL>#<name>`, as
+required by the official scanner's import-link parser. The copy button still
+copies the HTTPS subscription URL for manual remote-profile creation. Protocol
+filtering updates the nested subscription URL before generating the QR code.
+
 Optional browser checks require Playwright, Chrome, and jsQR:
 
 ```sh

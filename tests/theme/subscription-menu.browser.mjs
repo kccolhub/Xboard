@@ -61,10 +61,20 @@ try {
   await page.getByText('一键订阅', {exact: true}).click();
   await menu.locator('[data-client="SingBox"] [data-action="qr"]').click();
   await page.getByText('SingBox · 扫描二维码订阅', {exact: true}).waitFor();
-  assert.equal(new URL(await qrValue()).searchParams.get('flag'), 'sing-box');
+  const singBoxRemote = async () => {
+    const link = new URL(await qrValue());
+    assert.equal(link.protocol, 'sing-box:');
+    assert.equal(link.hostname, 'import-remote-profile');
+    assert.equal(decodeURIComponent(link.hash.slice(1)), 'Test panel');
+    const remote = new URL(link.searchParams.get('url'));
+    assert.equal(remote.searchParams.get('token'), 'fixture');
+    return remote;
+  };
+  assert.equal((await singBoxRemote()).searchParams.get('flag'), 'sing-box');
   await page.getByText('Hy2', {exact: true}).click();
-  assert.equal(new URL(await qrValue()).searchParams.get('flag'), 'sing-box');
-  assert.equal(new URL(await qrValue()).searchParams.get('types'), 'hysteria2');
+  const filteredRemote = await singBoxRemote();
+  assert.equal(filteredRemote.searchParams.get('flag'), 'sing-box');
+  assert.equal(filteredRemote.searchParams.get('types'), 'hysteria2');
   await page.screenshot({path: '/tmp/xboard-subscription-qr.png'});
   await page.keyboard.press('Escape');
   await page.setViewportSize({width: 320, height: 640});

@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {subscriptionRows, subscriptionUrl, renderSubscriptionMenu} from '../../theme/Xboard/assets/subscription-menu.mjs';
+import {subscriptionRows, subscriptionUrl, subscriptionQrValue, renderSubscriptionMenu} from '../../theme/Xboard/assets/subscription-menu.mjs';
 
 const base = 'https://panel.example/s/test?token=example&types=trojan&flag=old';
 const names = ['Clash', 'Clash Meta', 'Hiddify', 'SingBox', 'Shadowrocket', 'QuantumultX', 'Surge', 'Stash', 'NekoBox', 'Surfboard'];
@@ -65,6 +65,27 @@ test('three accessible icon buttons per row; actions only fire their own handler
   assert.deepEqual(events, [['qr', 'General'], ['copy', 'General']]);
 });
 
+test('SingBox QR exposes the remote URL to the official import-link parser', () => {
+  const row = rows.find(row => row.name === 'SingBox');
+  const value = subscriptionQrValue(row.name, row.subscribeUrl, '测试 & Panel');
+  assert.equal(value, row.url);
+  const link = new URL(value);
+  assert.equal(link.protocol, 'sing-box:');
+  assert.equal(link.hostname, 'import-remote-profile');
+  assert.equal(link.searchParams.get('url'), row.subscribeUrl);
+  assert.equal(decodeURIComponent(link.hash.slice(1)), '测试 & Panel');
+
+  const filtered = subscriptionUrl(row.subscribeUrl, null, 'hysteria2,trojan');
+  const remote = new URL(new URL(subscriptionQrValue('SingBox', filtered)).searchParams.get('url'));
+  assert.equal(remote.searchParams.get('flag'), 'sing-box');
+  assert.equal(remote.searchParams.get('types'), 'hysteria2,trojan');
+  assert.equal(remote.searchParams.get('token'), 'example');
+  assert.equal(subscriptionQrValue('SingBox', ''), '');
+  for (const other of rows.filter(row => row.name !== 'SingBox')) {
+    assert.equal(subscriptionQrValue(other.name, other.subscribeUrl), other.subscribeUrl);
+  }
+});
+
 test('bundle embeds the current helper and hooks the existing reactive QR modal', () => {
   const bundle = fs.readFileSync(new URL('../../theme/Xboard/assets/umi.js', import.meta.url), 'utf8');
   const helper = fs.readFileSync(new URL('../../theme/Xboard/assets/subscription-menu.mjs', import.meta.url), 'utf8').replace(/^export /gm, '');
@@ -72,5 +93,6 @@ test('bundle embeds the current helper and hooks the existing reactive QR modal'
   assert.ok(bundle.includes('renderSubscriptionMenu(Lr,{rows:subscriptionRows(y.value'));
   assert.ok(bundle.includes('const t=subscriptionQrBase.value||'));
   assert.ok(bundle.includes('subscriptionQrBase.value=row.subscribeUrl'));
+  assert.ok(bundle.includes('Lr(F,{value:subscriptionQrValue(subscriptionQrName.value,p.value,r.title),'));
   assert.ok(!bundle.includes('onClick:C}'));
 });

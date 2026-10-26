@@ -7,6 +7,8 @@ let source = fs.readFileSync(file, 'utf8');
 source = source.replace('h.value=[new URL(row.subscribeUrl).searchParams.get("types")||"auto"]', 'h.value=(new URL(row.subscribeUrl).searchParams.get("types")||"auto").split(",")');
 const helper = fs.readFileSync(new URL('../theme/Xboard/assets/subscription-menu.mjs', import.meta.url), 'utf8').replace(/^export /gm, '');
 const prefix = `/* compact-subscription-menu */\n${helper}\n/* end-subscription-menu */\n`;
+const qrValue = 'Lr(F,{value:subscriptionQrValue(subscriptionQrName.value,p.value,r.title),';
+if (!source.includes(qrValue)) replaceOnce('Lr(F,{value:p.value,', qrValue);
 if (source.includes('/* compact-subscription-menu */')) {
   const end = '/* end-subscription-menu */\n';
   if (source.includes(end)) source = prefix + source.slice(source.indexOf(end) + end.length);

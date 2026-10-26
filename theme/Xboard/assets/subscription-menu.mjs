@@ -34,6 +34,12 @@ function importUrl(client, url, title) {
   }
 }
 
+export function subscriptionQrValue(client, url, title) {
+  // Official sing-box scanners extract the remote URL from an import link's
+  // `url` query parameter; scanning a bare HTTPS subscription loses that URL.
+  return client === 'SingBox' && url ? importUrl(client, url, title) : url;
+}
+
 export function subscriptionRows(clients, base, title, hasHy2 = false) {
   if (!base) return [];
   const rows = [
