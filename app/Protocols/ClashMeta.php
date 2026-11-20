@@ -3,6 +3,7 @@
 namespace App\Protocols;
 
 use App\Models\Server;
+use App\Utils\Certificate;
 use App\Utils\Helper;
 use Illuminate\Support\Facades\File;
 use Symfony\Component\Yaml\Yaml;
@@ -618,6 +619,9 @@ class ClashMeta extends AbstractProtocol
             case 2:
                 $array['type'] = 'hysteria2';
                 $array['password'] = $password;
+                if (($fingerprint = Certificate::contentFingerprint($server)) !== null) {
+                    $array['fingerprint'] = $fingerprint;
+                }
                 if (data_get($protocol_settings, 'obfs.open')) {
                     $array['obfs'] = data_get($protocol_settings, 'obfs.type');
                     $array['obfs-password'] = data_get($protocol_settings, 'obfs.password');

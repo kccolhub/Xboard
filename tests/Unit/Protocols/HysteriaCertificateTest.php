@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Protocols;
 
+use App\Protocols\ClashMeta;
 use App\Protocols\General;
 use App\Protocols\Shadowrocket;
 use App\Http\Requests\Admin\ServerSave;
@@ -72,6 +73,37 @@ class HysteriaCertificateTest extends TestCase
     {
         parse_str(parse_url(trim($link), PHP_URL_QUERY), $parameters);
         return $parameters;
+    }
+
+    public function test_clash_meta_pins_the_pushed_leaf_with_verification_enabled(): void
+    {
+        $server = $this->server();
+        $server['protocol_settings']['tls']['allow_insecure'] = false;
+        $server['cert_config']['cert_content'] .= self::$secondCertificate;
+
+        $proxy = ClashMeta::buildHysteria('example-auth', $server, []);
+
+        $this->assertSame('hysteria2', $proxy['type']);
+        $this->assertFalse($proxy['skip-cert-verify']);
+        $this->assertSame(self::$fingerprint, $proxy['fingerprint']);
+        $this->assertStringNotContainsString('-----BEGIN', json_encode($proxy));
+
+        $server['cert_config']['cert_content'] = self::$secondCertificate;
+        $rotated = ClashMeta::buildHysteria('example-auth', $server, []);
+        $this->assertSame(openssl_x509_fingerprint(self::$secondCertificate, 'sha256'), $rotated['fingerprint']);
+    }
+
+    public function test_clash_meta_only_pins_content_certificates_for_hysteria_two(): void
+    {
+        $server = $this->server();
+        $server['cert_config']['mode'] = 'dns';
+        $this->assertArrayNotHasKey('fingerprint', ClashMeta::buildHysteria('example-auth', $server, []));
+
+        $server['cert_config']['mode'] = 'content';
+        $server['protocol_settings']['version'] = 1;
+        $proxy = ClashMeta::buildHysteria('example-auth', $server, []);
+        $this->assertSame('hysteria', $proxy['type']);
+        $this->assertArrayNotHasKey('fingerprint', $proxy);
     }
 
     #[DataProvider('generators')]
