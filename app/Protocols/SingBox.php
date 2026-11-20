@@ -136,12 +136,17 @@ class SingBox extends AbstractProtocol
         // for this isolated probe without disabling chain, validity or SNI checks.
         // Reality has its own authentication and must not use content certificates.
         if (!empty($outbound['tls']['enabled']) && empty($outbound['tls']['reality']['enabled'])) {
-            $certificate = Certificate::contentPem($server);
-            if ($certificate !== null) {
-                $outbound['tls']['certificate'] = [$certificate];
-            }
+            $this->appendContentCertificate($outbound['tls'], $server);
         }
         return $outbound;
+    }
+
+    private function appendContentCertificate(array &$tls, array $server): void
+    {
+        $certificate = Certificate::contentPem($server);
+        if ($certificate !== null) {
+            $tls['certificate'] = [$certificate];
+        }
     }
 
     public function handle()
@@ -290,6 +295,9 @@ class SingBox extends AbstractProtocol
             }
             if ($item['type'] === Server::TYPE_HYSTERIA) {
                 $hysteriaConfig = $this->buildHysteria($this->user['uuid'], $item);
+                if ($hysteriaConfig['type'] === 'hysteria2') {
+                    $this->appendContentCertificate($hysteriaConfig['tls'], $item);
+                }
                 $proxies[] = $hysteriaConfig;
             }
             if ($item['type'] === Server::TYPE_TUIC) {

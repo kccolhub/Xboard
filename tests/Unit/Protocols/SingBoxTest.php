@@ -3,6 +3,7 @@
 namespace Tests\Unit\Protocols;
 
 use App\Protocols\SingBox;
+use App\Utils\Certificate;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 
@@ -144,6 +145,54 @@ class SingBoxTest extends TestCase
         $this->assertSame('ipv4_only', $result['inbounds'][0]['domain_strategy']);
         $this->assertSame('ipv4_only', $result['route']['rules'][0]['strategy']);
         $this->assertSame('ipv4_only', $result['outbounds'][0]['domain_strategy']);
+    }
+
+    public function test_hysteria2_subscription_trusts_only_the_public_certificate_for_each_content_node(): void
+    {
+        $first = Certificate::generate('first.example');
+        $second = Certificate::generate('second.example');
+        $node = [
+            'type' => 'hysteria',
+            'name' => 'first',
+            'host' => '192.0.2.1',
+            'port' => 443,
+            'protocol_settings' => [
+                'version' => 2,
+                'tls' => ['server_name' => 'first.example', 'allow_insecure' => false],
+            ],
+            'cert_config' => [
+                'mode' => 'content',
+                'cert_content' => $first['cert_content'] . $first['key_content'],
+                'key_content' => $first['key_content'],
+            ],
+        ];
+        $other = array_replace($node, [
+            'name' => 'second',
+            'protocol_settings' => [
+                'version' => 2,
+                'tls' => ['server_name' => 'second.example', 'allow_insecure' => false],
+            ],
+            'cert_config' => ['cert_mode' => 'content'] + $second,
+        ]);
+        $file = array_replace_recursive($node, ['name' => 'file', 'cert_config' => ['mode' => 'file']]);
+        $legacy = array_replace_recursive($node, ['name' => 'legacy', 'protocol_settings' => ['version' => 1]]);
+
+        $reflection = new ReflectionClass(SingBox::class);
+        $protocol = $reflection->newInstanceWithoutConstructor();
+        $reflection->getProperty('user')->setValue($protocol, ['uuid' => 'fixture-password']);
+        $reflection->getProperty('servers')->setValue($protocol, [$node, $other, $file, $legacy]);
+        $reflection->getProperty('clientName')->setValue($protocol, 'sing-box');
+        $reflection->getProperty('clientVersion')->setValue($protocol, '1.14.0');
+        $reflection->getProperty('config')->setValue($protocol, ['outbounds' => []]);
+        $outbounds = array_column($reflection->getMethod('buildOutbounds')->invoke($protocol), null, 'tag');
+
+        $this->assertSame([trim($first['cert_content'])], $outbounds['first']['tls']['certificate']);
+        $this->assertSame([trim($second['cert_content'])], $outbounds['second']['tls']['certificate']);
+        $this->assertSame('first.example', $outbounds['first']['tls']['server_name']);
+        $this->assertFalse($outbounds['first']['tls']['insecure']);
+        $this->assertArrayNotHasKey('certificate', $outbounds['file']['tls']);
+        $this->assertArrayNotHasKey('certificate', $outbounds['legacy']['tls']);
+        $this->assertStringNotContainsString('PRIVATE KEY', json_encode($outbounds));
     }
 
     private function normalizeDnsDetours(array $config): array
